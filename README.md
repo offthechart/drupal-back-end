@@ -8,9 +8,9 @@ The code in this repository is rather old and is unlikely to work out of the box
 The two modules in this repository were used to manage numerous aspects of the running of an online radio station.
 
 ### Front End
-* Generates custom pages about music and arists, using integrations with BBC Music, SongKick and MusicBrainz
+* Generates [custom pages about music and arists](http://web.archive.org/web/20130113132912/http://www.offthechartradio.co.uk:80/music/artist/Calvin%20Harris), using integrations with BBC Music, SongKick and MusicBrainz
 * Lists when artists' tracks were played on the radio station and by which show(s)
-* Generates schedule pages indicating which DJs are on when
+* Generates [schedule pages](http://web.archive.org/web/20121226233817/http://www.offthechartradio.co.uk:80/schedule) indicating which [DJs](http://web.archive.org/web/20121226233848/http://www.offthechartradio.co.uk:80/shows) are on when
 * Requires a copy of 'phpbrainz'
 
 ### Back End
