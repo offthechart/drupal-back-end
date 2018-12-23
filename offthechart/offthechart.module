@@ -1,0 +1,3315 @@
+<?php
+// $Id: offthechart.module
+
+/**
+* @file
+* Management module for DJs, shows and servers.
+*/
+
+// Admin interface shows page
+function offthechart_shows_admin($form, &$form_state) {
+
+  unset($form_state["input"]);
+
+  $show_id = 0;
+  $showlist = array("Add a new show");
+  $listquery = db_query("SELECT show_title, show_id FROM {otc_shows} ORDER BY show_title");
+
+  $dbshowlist = $listquery->fetchAll();
+
+  for ($i=0;$i<sizeof($dbshowlist);$i++) {
+    $showlist[] = $dbshowlist[$i]->show_title;
+    //print_r($formstate);
+    if (isset($form_state['values'])) {
+      if ($i == $form_state['values']['show_selection']['select'] - 1) {
+        $show_id = $dbshowlist[$i]->show_id;
+      }
+    }
+  }
+  
+  $form['show_selection'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('OTC shows'),
+    '#prefix' => '<div id="selection-div">',
+    '#suffix' => '</div>',
+    '#tree' => TRUE,
+    '#description' => t('Please select a show to edit'),
+  );
+  $form['show_selection']['select'] = array(
+    '#type' => 'select',
+    #'#default_value' =>  db_read('{otc_shows}','show_title',array(0)),
+    '#options' => $showlist,
+    #'#description' => t('The name of the show.'),
+    '#ajax' => array(
+      'callback' => 'offthechart_shows_admin_callback',
+      'wrapper' => 'entry-div',
+      'method' => 'replace',
+      'effect' => 'fade',
+    ),
+  );
+
+  if ($show_id != 0) {
+    $fieldquery = db_query("SELECT * FROM {otc_shows} WHERE `show_id` = '$show_id'");
+    $dbfieldlist = $fieldquery->fetchAll();
+    $dbfieldlist = array($dbfieldlist[0]->show_title,$dbfieldlist[0]->show_image,$dbfieldlist[0]->show_minisite,$dbfieldlist[0]->show_email,$dbfieldlist[0]->show_forum,$dbfieldlist[0]->show_master_uid,$dbfieldlist[0]->show_visible);
+  } else {
+    $dbfieldlist = array(False, False, False, False, False, False, False);
+  }
+
+  $actiondesc = "adding a new show";
+  if ($dbfieldlist[0]) {
+    $actiondesc = "editing '" . $dbfieldlist[0] . "'";
+  }
+
+  $form['show_edit'] = array(
+      '#title' => t("Currently " . $actiondesc),
+      '#prefix' => '<div id="entry-div">',
+      '#suffix' => '</div>',
+      '#type' => 'fieldset',
+  );
+  $form['show_edit']['id'] = array(
+      '#type' => 'value',
+      '#value' => $show_id,
+  );
+  $form['show_edit']["name"] = array(
+      '#type' => 'textfield',
+      '#title' => "Show name",
+      '#required' => True,
+      '#default_value' => $dbfieldlist[0],
+  );
+  $form['show_edit']["image"] = array(
+      '#type' => 'textfield',
+      '#title' => "Image",
+      '#default_value' => $dbfieldlist[1],
+      '#description' => '/djdata/images/onair/XXXXXX.png',
+  );
+  $form['show_edit']["minisite"] = array(
+      '#type' => 'textfield',
+      '#title' => "Minisite",
+      '#default_value' => $dbfieldlist[2],
+      '#description' => 'offthechartradio.co.uk/XXXXXX',
+  );
+  $form['show_edit']["email"] = array(
+      '#type' => 'textfield',
+      '#title' => "E-mail",
+      '#default_value' => $dbfieldlist[3],
+      '#description' => "XXXXXX@offthechartradio.co.uk",
+  );
+  $form['show_edit']["forum"] = array(
+      '#type' => 'textfield',
+      '#title' => "Forum",
+      '#default_value' => $dbfieldlist[4],
+      '#description' => "/forums/viewforum.php?f=XXXXXX",
+  );
+  $form['show_edit']["visible"] = array(
+      '#type' => 'checkbox',
+      '#title' => "Publicly visible",
+      '#default_value' => $dbfieldlist[6],
+  );
+
+  $djrolequery = db_query("SELECT rid, name FROM {role} WHERE `name` = 'DJs' LIMIT 1");
+  $djrole = $djrolequery->fetch();
+  $djrid = $djrole->rid;
+  $userquery = db_query("SELECT {users}.uid, {users}.name FROM {users} INNER JOIN {users_roles} ON {users}.uid = {users_roles}.uid WHERE {users_roles}.rid = '$djrid' ORDER BY {users}.name");
+  $dbuserlist = $userquery->fetchAll();
+  $extrausers = db_query("SELECT * FROM {otc_shows_users} WHERE `show_id` = '$show_id'");
+  $dbextrauserlist = $extrausers->fetchAll();
+  if (sizeof($dbuserlist) > 0) {
+    $usernum = 0;
+    for ($i=0;$i<sizeof($dbuserlist);$i++) {
+      $userlist[] = $dbuserlist[$i]->name;
+      $uidlist[] = $dbuserlist[$i]->uid;
+      if ($dbuserlist[$i]->uid == $dbfieldlist[5]) {
+        $usernum = $i;
+      }
+      if (sizeof($dbextrauserlist > 0)) {
+        for ($j=0;$j<sizeof($dbextrauserlist);$j++) {
+          if ($dbextrauserlist[$j]->uid == $dbuserlist[$i]->uid) {
+            $extrauserlist[] = $i;
+          }
+        }
+      }
+    }
+  } else {
+    $userlist[] = "No DJs found - please add some under the DJs role";
+    $uidlist[] = 0;
+    $usernum = 0;
+  }
+  
+  /*if (!isset($extrauserlist)) {
+    $extrauserlist = array();
+  }*/
+  
+  $form['show_edit']["master_uid"] = array(
+      '#type' => 'select',
+      '#title' => "Main DJ",
+      '#options' => $userlist,
+      '#required' => True,
+      '#default_value' => $usernum,
+  );
+  $form['show_edit']["djnames"] = array(
+      '#type' => 'value',
+      '#value' => $userlist,
+  );
+  $form['show_edit']["djids"] = array(
+      '#type' => 'value',
+      '#value' => $uidlist,
+  );
+  
+  if ((empty($form_state['values']['howmany_select'])) AND (!isset($extrauserlist))) {
+    // Only happens on form load
+    $num_boxes = 0;
+  } else if (isset($extrauserlist) AND ($show_id != $form_state['values']['id'])) {
+    $num_boxes = sizeof($extrauserlist);
+  } else if (($show_id == $form_state['values']['id']) AND isset($form_state['values']['howmany_select'])) {
+    $num_boxes = $form_state['values']['howmany_select']-1;
+  } else {
+    $num_boxes = 0;
+  }
+  
+  $defaultboxes = $num_boxes+1;
+
+  $form['show_edit']['howmany_select'] = array(
+    '#title' => t('How many additional DJs are in this show?'),
+    '#type' => 'select',
+    '#options' => array(1 => 0, 2 => 1, 3 => 2, 4 => 3, 5 => 4, 6 => 5, 7 => 6, 8 => 7, 9 => 8, 10 => 9, 11 => 10),
+    '#default_value' => $defaultboxes,
+    '#ajax' => array(
+      'callback' => 'offthechart_shows_admin_dj_callback',
+      'wrapper' => 'dj-selection-div',
+      'method' => 'replace',
+      'effect' => 'fade',
+    ),
+
+  );
+  
+  $form['show_edit']['djs_fieldset'] = array(
+    '#title' => t("Additional DJs"),
+    '#prefix' => '<div id="dj-selection-div">',
+    '#suffix' => '</div>',
+    '#type' => 'fieldset',
+    '#onload' => true,
+  );
+
+  for ($i=1; $i<=$num_boxes; $i++) {
+    $form['show_edit']['djs_fieldset']["dropdown$i"] = array(
+      '#type' => 'select',
+      '#title' => "Additional DJ $i",
+      '#options' => $userlist,
+      '#required' => True,
+      '#default_value' => $extrauserlist[$i - 1],
+    );
+  }
+
+  $form['show_edit']['save'] = array(
+      '#type' => 'submit',
+      '#default_value' => t('Save Changes'),
+  );
+/*  if ($dbfieldlist[0]) {
+    $form['show_edit']['delete'] = array(
+        '#type' => 'submit',
+        '#default_value' => t('Delete Show'),
+	'#submit' => array('offthechart_shows_admin_delete'),
+    );
+  }*/
+
+  return $form;
+}
+
+function offthechart_shows_admin_callback($form, &$form_state) {
+  return $form['show_edit'];
+}
+
+function offthechart_shows_admin_dj_callback($form, &$form_state) {
+  return $form['show_edit']['djs_fieldset'];
+}
+
+function offthechart_shows_admin_submit($form, &$form_state) {
+  if ($form_state['values']['djids'][0] != 0) {
+    $userid = $form_state['values']['djids'][$form_state['values']['master_uid']];
+    $fields = array('show_title' => $form_state['values']['name'], 'show_image' => $form_state['values']['image'], 'show_minisite' => $form_state['values']['minisite'], 'show_email' => $form_state['values']['email'], 'show_forum' => $form_state['values']['forum'], 'show_master_uid' => $userid, 'show_visible' => $form_state['values']['visible']);
+    if (!($form_state['values']['id'] == 0)) {
+      db_delete('otc_shows_users')->condition('show_id', $form_state['values']['id'])->execute();
+    }
+    for ($i=1;$i<11;$i++) {
+      $tempname = "dropdown" . $i;
+      //drupal_set_message(t($tempname));
+      //drupal_set_message(t($form_state['values'][$tempname]));
+      if (isset($form_state['values'][$tempname])) {
+        // Execute DB add / update
+        $extrafields = array('show_id' => $form_state['values']['id'], 'uid' => $form_state['values']['djids'][$form_state['values'][$tempname]]);
+        db_insert('otc_shows_users')->fields($extrafields)->execute();
+      } else {
+        break;
+      }
+    }
+    if ($form_state['values']['id'] == 0) {
+      db_insert('otc_shows')->fields($fields)->execute();
+      drupal_set_message(t("Successfully added new show '" . $form_state['values']['name'] . "'"));
+    } else {
+      db_update('otc_shows')->condition('show_id', $form_state['values']['id'])->fields($fields)->execute();
+      drupal_set_message(t("Successfully edited show '" . $form_state['values']['name'] . "'"));
+    }
+  } else {
+      drupal_set_message(t("You must add users to the DJs role before shows can be edited."), "error");
+  }
+}
+
+function offthechart_shows_admin_delete($form, &$form_state) {
+  db_delete('otc_shows_users')->condition('show_id', $form_state['values']['id'])->execute();
+  db_delete('otc_shows')->condition('show_id', $form_state['values']['id'])->execute();
+  drupal_set_message(t("Successfully removed show '" . $form['show_edit']['name']['#default_value'] . "'"));
+}
+
+// Admin interface schedule page
+function offthechart_schedule_admin($form, &$form_state) {
+
+  unset($form_state["input"]);
+
+  //drupal_set_message("This form is currently undergoing maintenance. Please do not use it without contacting Andy first.","error");
+
+  $form['schedule_date_selection'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Schedule date'),
+    '#prefix' => '<div id="date-selection-div">',
+    '#suffix' => '</div>',
+    '#tree' => TRUE,
+    '#description' => t('Please select a date to edit'),
+  );
+  if ((date("H") >= 0) AND (date("H") < 5)) {
+    $addition = 5 * 60 * 60;
+  } else {
+    $addition = 0;
+  }
+  for ($i=0;$i<14;$i++) {
+    $datelist[] = date("d/m/Y",time() + ($i * 86400) + $addition);
+    $sentdatelist[] = date("Y-m-d",time() + ($i * 86400) + $addition);
+  }
+  $defaultdate = date("Y-m-d") . " 00:00:00";
+  $dateformat = "Y-m-d";
+  $form['schedule_date_selection']['date_select'] = array(
+    '#type' => 'date_popup',
+    '#default_value' => $defaultdate,
+    '#date_format' => $dateformat,
+    '#date_label_position' => 'none',
+    '#ajax' => array(
+      'callback' => 'offthechart_schedule_admin_event_callback',
+      'wrapper' => 'event-selection-div',
+      'method' => 'replace',
+      'effect' => 'fade',
+    ),
+  );
+  
+  if (isset($form_state['values'])) {
+    //$schedule_date = $form_state['values']['schedule_date_selection']['date_values'][$form_state['values']['schedule_date_selection']['date_select']];
+    $schedule_date = $form_state['values']['schedule_date_selection']['date_select'];
+  } else {
+    $schedule_date = date("Y-m-d");
+  }
+  $schedule_timestamp = strtotime($schedule_date);
+  $schedule_date = strftime("%Y-%m-%d %H:%M:%S", $schedule_timestamp);
+  $schedule_date_advance_hour = strftime("%H",$schedule_timestamp + 86400);
+  if ($schedule_date_advance_hour == "23") {
+    $schedule_date_advance = strftime("%Y-%m-%d %H:%M:%S",$schedule_timestamp + 90000);
+  } else if ($schedule_date_advance_hour == "01") {
+    $schedule_date_advance = strftime("%Y-%m-%d %H:%M:%S",$schedule_timestamp + 82800);
+  } else {
+    $schedule_date_advance = strftime("%Y-%m-%d %H:%M:%S",$schedule_timestamp + 86400);
+  }
+  $eventquery = db_query("SELECT * FROM {otc_schedule} WHERE `schedule_start` >= '$schedule_date' AND `schedule_start` < '$schedule_date_advance' ORDER BY `schedule_start`");
+  $dbeventlist = $eventquery->fetchAll();
+  $schedule_id = 0;
+  if (sizeof($dbeventlist) > 0) {
+    $eventlist[] = "Add new event for this date";
+    $eventidlist[] = 0;
+    for ($i=0;$i<sizeof($dbeventlist);$i++) {
+      $showname = $dbeventlist[$i]->schedule_title;
+      if ($showname == "") {
+        // Check for a DJ name or show name
+        $scheduleid = $dbeventlist[$i]->schedule_id;
+        if ($dbeventlist[$i]->schedule_uid != 0) {
+          $userquery = db_query("SELECT {users}.uid, {users}.name FROM {users} INNER JOIN {otc_schedule} ON {users}.uid = {otc_schedule}.schedule_uid WHERE {otc_schedule}.schedule_id = '$scheduleid'");
+          $dbuserlist = $userquery->fetch();
+          // Changed 03/12/11
+          if ($dbuserlist != "") {
+            $showname = $dbuserlist->name;
+          }
+        } else if ($dbeventlist[$i]->schedule_show_id != 0) {
+          $showquery = db_query("SELECT {otc_shows}.show_id, {otc_shows}.show_title FROM {otc_shows} INNER JOIN {otc_schedule} ON {otc_shows}.show_id = {otc_schedule}.schedule_show_id WHERE {otc_schedule}.schedule_id = '$scheduleid'");
+          $dbshowlist = $showquery->fetch();
+          if ($dbshowlist != "") {
+            $showname = $dbshowlist->show_title;
+          }
+        }
+        if ($showname == "") {
+          $showname = "Error: Show name not found";
+        }
+      }
+      //$eventlist[] = date("H:i",strtotime($dbeventlist[$i]->schedule_start)) . " - " . $showname;
+      $showtimestring = substr($dbeventlist[$i]->schedule_start,11,5);
+      $eventlist[] = $showtimestring . " - " . $showname;
+      $eventidlist[] = $dbeventlist[$i]->schedule_id;
+      /*if ($dbeventlist[$i]->uid == $dbfieldlist[5]) {
+        $eventnum = $i;
+      } else {
+        $eventnum = 0;
+      }*/
+      if (isset($form_state['values'])) {
+        if ($i == $form_state['values']['schedule_show_selection']['event_select'] - 1) {
+          if ($form_state['values']['dateval'] == $schedule_date) {
+            $schedule_id = $dbeventlist[$i]->schedule_id;
+          }
+        }
+      }
+    }
+  } else {
+    $eventlist[] = "Add new event for this date";
+    $eventidlist[] = 0;
+    $eventnum = 0;
+  }
+
+  if ($schedule_id != 0) {
+    $fieldquery = db_query("SELECT * FROM {otc_schedule} WHERE `schedule_id` = '$schedule_id'");
+    $dbfieldlist = $fieldquery->fetchAll();
+    $dbfieldlist = array($dbfieldlist[0]->schedule_start,$dbfieldlist[0]->schedule_uid,$dbfieldlist[0]->schedule_show_id,$dbfieldlist[0]->schedule_description,$dbfieldlist[0]->schedule_show_type,$dbfieldlist[0]->schedule_filename,$dbfieldlist[0]->schedule_theme,$dbfieldlist[0]->schedule_title,$dbfieldlist[0]->schedule_image,$dbfieldlist[0]->schedule_minisite,$dbfieldlist[0]->schedule_email,$dbfieldlist[0]->schedule_forum,$dbfieldlist[0]->schedule_replay_orig_id,$dbfieldlist[0]->schedule_playlisted);
+  } else {
+    $dbfieldlist = array(False, False, False, False, False, False, False, False, False, False, False, False, False, False);
+  }
+
+
+  $form['schedule_show_selection'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('Schedule events'),
+    '#prefix' => '<div id="event-selection-div">',
+    '#suffix' => '',
+    '#tree' => TRUE,
+    '#description' => t('Please select an event to edit, copy events from a previous day, or enter a new event below'),
+  );
+  $form['schedule_show_selection']['event_select'] = array(
+    '#type' => 'select',
+    '#options' => $eventlist,
+    //'#default_value' => $eventnum,
+    '#ajax' => array(
+      'callback' => 'offthechart_schedule_admin_edit_callback',
+      'wrapper' => 'event-entry-div',
+      'method' => 'replace',
+      'effect' => 'fade',
+    ),
+  );
+  
+  if ($schedule_timestamp > time()) {
+    $form['schedule_show_selection']['copy_day'] = array(
+        '#type' => 'submit',
+        '#default_value' => t("Use Previous Day's Events"),
+        '#submit' => array('offthechart_schedule_admin_prevday'),
+        '#validate' => array('offthechart_schedule_admin_fake_validate'),
+    );
+    $form['schedule_show_selection']['copy_week'] = array(
+        '#type' => 'submit',
+        '#default_value' => t("Use Previous Week's Events"),
+        '#submit' => array('offthechart_schedule_admin_prevweek'),
+        '#validate' => array('offthechart_schedule_admin_fake_validate'),
+    );
+  }
+  $form['schedule_edit'] = array(
+      //'#title' => t("Currently " . $actiondesc),
+      '#prefix' => '<div id="event-entry-div">',
+      '#suffix' => '</div></div>',
+      '#type' => 'fieldset',
+  );
+
+  $form['schedule_edit']['id'] = array(
+      '#type' => 'value',
+      '#value' => $schedule_id,
+  );
+  
+  //drupal_set_message($schedule_id);
+  
+  $form['schedule_edit']['dateval'] = array(
+      '#type' => 'value',
+      '#value' => $schedule_date,
+  );
+
+  $hourlist = array("00","01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","16","17","18","19","20","21","22","23");
+  for ($i=0;$i<24;$i++) {
+    $timelist[] = $hourlist[$i] . ":00";
+  }
+  if (is_numeric(strtotime($dbfieldlist[0]))) {
+    $newdate = date("G",strtotime($dbfieldlist[0]));
+  } else {
+    $newdate = 0;
+  }
+  
+  if ((strtotime($dbfieldlist[0]) > time()) OR ($schedule_id == 0)) {
+    $timedisabled = false;
+  } else {
+    $timedisabled = true;
+  }
+  
+  $form['schedule_edit']['time_select'] = array(
+    '#type' => 'select',
+    '#options' => $timelist,
+    '#title' => t("Show start time"),
+    '#default_value' => $newdate,
+    '#disabled' => $timedisabled,
+  );
+  $form['schedule_edit']['time_values'] = array(
+      '#type' => 'value',
+      '#value' => $timelist,
+  );
+  
+  $djrolequery = db_query("SELECT rid, name FROM {role} WHERE `name` = 'DJs' LIMIT 1");
+  $djrole = $djrolequery->fetch();
+  $djrid = $djrole->rid;
+  $userquery = db_query("SELECT {users}.uid, {users}.name FROM {users} INNER JOIN {users_roles} ON {users}.uid = {users_roles}.uid WHERE {users_roles}.rid = '$djrid' ORDER BY {users}.name");
+  $dbuserlist = $userquery->fetchAll();
+  $usernum = 0;
+  if (sizeof($dbuserlist) > 0) {
+    $userlist[] = "None";
+    $uidlist[] = 0;
+    for ($i=0;$i<sizeof($dbuserlist);$i++) {
+      $userlist[] = $dbuserlist[$i]->name;
+      $uidlist[] = $dbuserlist[$i]->uid;
+      if ($dbuserlist[$i]->uid == $dbfieldlist[1]) {
+        $usernum = $i + 1;
+      }
+    }
+  } else {
+    $userlist[] = "No DJs found - please add some under the DJs role";
+    $uidlist[] = 0;
+  }
+
+  $showquery = db_query("SELECT show_title,show_id FROM {otc_shows}");
+  $dbshowlist = $showquery->fetchAll();
+  $shownum = 0;
+  if (sizeof($dbshowlist) > 0) {
+    $showlist[] = "None";
+    $showidlist[] = 0;
+    for ($i=0;$i<sizeof($dbshowlist);$i++) {
+      $showlist[] = $dbshowlist[$i]->show_title;
+      $showidlist[] = $dbshowlist[$i]->show_id;
+      if ($dbshowlist[$i]->show_id == $dbfieldlist[2]) {
+        $shownum = $i + 1;
+      }
+    }
+  } else {
+    $showlist[] = "No shows found - please add some using the edit shows form";
+    $showidlist[] = 0;
+  }
+
+  $form['schedule_edit']["dj_id"] = array(
+      '#type' => 'select',
+      '#title' => "Active DJ",
+      '#options' => $userlist,
+      '#default_value' => $usernum,
+      '#description' => 'Select only one DJ or show (below) for each schedule entry',
+      '#ajax' => array(
+        'callback' => 'offthechart_schedule_admin_replay_callback',
+        'wrapper' => 'event-replay-div',
+        'method' => 'replace',
+        'effect' => 'fade',
+      ),
+  );
+  $form['schedule_edit']['dj_id_list'] = array(
+      '#type' => 'value',
+      '#value' => $uidlist,
+  );
+
+  $form['schedule_edit']["show_id"] = array(
+      '#type' => 'select',
+      '#title' => "Active show",
+      '#options' => $showlist,
+      '#default_value' => $shownum,
+      '#description' => 'Select only one show or DJ (above) for each schedule entry',
+      '#ajax' => array(
+        'callback' => 'offthechart_schedule_admin_replay_callback',
+        'wrapper' => 'event-replay-div',
+        'method' => 'replace',
+        'effect' => 'fade',
+      ),
+  );
+  $form['schedule_edit']['show_id_list'] = array(
+      '#type' => 'value',
+      '#value' => $showidlist,
+  );
+  
+  $form['schedule_edit']['playlist'] = array(
+      '#type' => 'value',
+      '#value' => $dbfieldlist[13],
+  );
+
+  $form['schedule_edit']["description"] = array(
+      '#type' => 'textfield',
+      '#title' => "Description",
+      '#default_value' => $dbfieldlist[3],
+  );
+
+  $typelist = array("Live", "Pre-Record", "Replay", "Automated");
+  $form['schedule_edit']["show_type"] = array(
+      '#type' => 'select',
+      '#title' => "Show type",
+      '#options' => $typelist,
+      '#default_value' => $dbfieldlist[4],
+      '#ajax' => array(
+        'callback' => 'offthechart_schedule_admin_replay_callback',
+        'wrapper' => 'event-replay-div',
+        'method' => 'replace',
+        'effect' => 'fade',
+      ),
+  );
+  
+  if (isset($form_state['values'])) {
+    if ($form_state['values']['id'] == $schedule_id) {
+      if (isset($form_state['values']['dj_id'])) {
+        $usernum = $form_state['values']['dj_id'];
+      }
+      if (isset($form_state['values']['show_id'])) {
+        $shownum = $form_state['values']['show_id'];
+      }
+      if (isset($form_state['values']['show_type'])) {
+        $dbfieldlist[4] = $form_state['values']['show_type'];
+      }
+    }
+  }
+
+  $replaynum = 0;
+  
+  $checkdate = strftime("%Y-%m-%d", $schedule_timestamp) . " 00:00:00";
+  
+  if (($usernum != 0) AND ($shownum != 0)) {
+    $replaylist = array("You must select either a DJ or show from the dropdowns, not both");
+  } else {
+    if ((($usernum != 0) OR ($shownum != 0)) AND ($dbfieldlist[4] == 2)) {
+        if ($usernum != 0) {
+          $useridval = $uidlist[$usernum];
+          $replayquery = db_query("SELECT schedule_id,schedule_start FROM {otc_schedule} WHERE schedule_uid = '$useridval' AND schedule_show_type < '2' AND `schedule_start` < '" . $checkdate . "' ORDER BY `schedule_start` DESC");
+        } else {
+          $showidval = $showidlist[$shownum];
+          $replayquery = db_query("SELECT schedule_id,schedule_start FROM {otc_schedule} WHERE schedule_show_id = '$showidval' AND schedule_show_type < '2' AND `schedule_start` < '" . $checkdate . "' ORDER BY `schedule_start` DESC");
+        }
+        $dbreplaylist = $replayquery->fetchAll();
+        $replaylist = array("Please select an original show for this replay");
+
+        for ($i=0;$i<sizeof($dbreplaylist);$i++) {
+          $replaylist[] = date("l, jS F Y - H:i",strtotime($dbreplaylist[$i]->schedule_start));
+          if ($dbfieldlist[12] == $dbreplaylist[$i]->schedule_id) {
+            $replaynum = $i + 1;
+          }
+        }
+  
+    } else {
+      $replaylist = array("You must select a DJ or show first, and the Replay show type");
+    }
+  }
+
+  $form['schedule_edit']["show_replay_orig"] = array(
+      '#type' => 'select',
+      '#title' => "Replay original show",
+      '#options' => $replaylist,
+      '#prefix' => '<div id="event-replay-div">',
+      '#default_value' => $replaynum,
+      '#suffix' => '</div>',
+  );
+
+
+  $form['schedule_edit']["filename"] = array(
+      '#type' => 'textfield',
+      '#title' => "Filename",
+      '#default_value' => $dbfieldlist[5],
+      '#description' => "(e.g. TimW\\timwthu.mp3)",
+  );
+  $form['schedule_edit']["theme"] = array(
+      '#type' => 'textfield',
+      '#title' => "Automation theme",
+      '#default_value' => $dbfieldlist[6],
+      '#description' => "(e.g. Music (All))",
+  );
+  $form['schedule_edit']["name"] = array(
+      '#type' => 'textfield',
+      '#title' => "Show name override",
+      '#default_value' => $dbfieldlist[7],
+  );
+  $form['schedule_edit']["image"] = array(
+      '#type' => 'textfield',
+      '#title' => "Image override",
+      '#default_value' => $dbfieldlist[8],
+      '#description' => '/djdata/images/onair/XXXXXX.png',
+  );
+  $form['schedule_edit']["minisite"] = array(
+      '#type' => 'textfield',
+      '#title' => "Minisite override",
+      '#default_value' => $dbfieldlist[9],
+      '#description' => 'offthechartradio.co.uk/XXXXXX',
+  );
+  $form['schedule_edit']["email"] = array(
+      '#type' => 'textfield',
+      '#title' => "E-mail override",
+      '#default_value' => $dbfieldlist[10],
+      '#description' => "XXXXXX@offthechartradio.co.uk",
+  );
+  $form['schedule_edit']["forum"] = array(
+      '#type' => 'textfield',
+      '#title' => "Forum override",
+      '#default_value' => $dbfieldlist[11],
+      '#description' => "/forums/viewforum.php?f=XXXXXX",
+  );
+
+  $form['schedule_edit']['save'] = array(
+      '#type' => 'submit',
+      '#default_value' => t('Save Schedule Item'),
+  );
+  if (($dbfieldlist[0]) AND (strtotime($dbfieldlist[0]) > time())) {
+    $form['schedule_edit']['delete'] = array(
+        '#type' => 'submit',
+        '#default_value' => t('Remove Schedule Item'),
+        '#submit' => array('offthechart_schedule_admin_delete'),
+        '#validate' => array('offthechart_schedule_admin_fake_validate'),
+    );
+  }
+  //if (($dbfieldlist[4] < 2) AND ($dbfieldlist[13] > 1)) {
+  if (($dbfieldlist[4] < 2) AND ($dbfieldlist[13] > 0)) {
+    $form['schedule_edit']['unlock'] = array(
+        '#type' => 'submit',
+        '#default_value' => t('Unlock Playlist'),
+        '#submit' => array('offthechart_schedule_admin_unlock'),
+        '#validate' => array('offthechart_schedule_admin_fake_validate'),
+    );
+  }
+
+  return $form;
+}
+
+function offthechart_schedule_admin_event_callback($form, &$form_state) {
+  return array("schedule_show_selection" => $form['schedule_show_selection'], "schedule_edit" => $form['schedule_edit']);
+}
+
+function offthechart_schedule_admin_replay_callback($form, &$form_state) {
+  return array("show_replay_orig" => $form['schedule_edit']['show_replay_orig']);
+}
+
+function offthechart_schedule_admin_edit_callback($form, &$form_state) {
+  return $form['schedule_edit'];
+}
+
+function offthechart_schedule_admin_validate($form, &$form_state) {
+
+  if ($form_state['values']['show_type'] != 3) {
+    // Either DJ  or show must be set
+    if (($form_state['values']['dj_id'] == 0) AND ($form_state['values']['show_id'] == 0)) {
+      form_set_error('', t('You must select an active DJ or show from the dropdowns for non-automated shows.'));
+    } else if (($form_state['values']['dj_id'] != 0) AND ($form_state['values']['show_id'] != 0)) {
+      form_set_error('', t('You cannot set both an active DJ and an active show at the same time.'));
+    }
+    if ($form_state['values']['theme'] != "") {
+      form_set_error('theme', t('Themes are only required for automated shows.'));
+    }
+  }
+  if ($form_state['values']['show_type'] == 1) {
+    if ($form_state['values']['filename'] == "") {
+      form_set_error('filename', t('You must specify a filename for a pre-recorded show.'));
+    }
+  }
+  if ($form_state['values']['show_type'] == 2) {
+    if ($form_state['values']['show_replay_orig'] < 1) {
+      form_set_error('show_replay_orig', t('You must select a previous show to replay when setting up a replay show.'));
+    }
+    if ($form_state['values']['filename'] == "") {
+      form_set_error('filename', t('You must specify a filename for a replay show.'));
+    }
+  }
+  if ($form_state['values']['show_type'] == 3) {
+    if (($form_state['values']['dj_id'] != 0) OR ($form_state['values']['show_id'] != 0)) {
+      form_set_error('', t('Automated shows cannot have a DJ or show selected.'));
+    }
+    if ($form_state['values']['theme'] == "") {
+      form_set_error('theme', t('You must specify a theme for an automated show.'));
+    }
+  }
+}
+
+function offthechart_schedule_admin_fake_validate($form, &$form_state) {
+  // Nothing to see here
+}
+
+function offthechart_schedule_admin_submit($form, &$form_state) {
+
+    $date_timestamp = strtotime($form_state['values']['schedule_date_selection']['date_select']);
+    $date = strftime("%Y-%m-%d",$date_timestamp);
+    $time_timestamp = strtotime($form_state['values']['time_values'][$form_state['values']['time_select']]);
+    $time = strftime("%H:%M:%S",$time_timestamp);
+
+    $replaystart = "";
+    $useridval = $form_state['values']['dj_id_list'][$form_state['values']['dj_id']];
+    $showidval = $form_state['values']['show_id_list'][$form_state['values']['show_id']];
+    if ((($useridval != 0) OR ($showidval != 0)) AND ($form_state['values']['show_type'] == 2)) {
+      if ($useridval != 0) {
+        $replayquery = db_query("SELECT schedule_id,schedule_start FROM {otc_schedule} WHERE schedule_uid = '$useridval' AND schedule_show_type < '2' AND `schedule_start` < '" . $date . " 00:00:00' ORDER BY `schedule_start` DESC");
+      } else {
+        $replayquery = db_query("SELECT schedule_id,schedule_start FROM {otc_schedule} WHERE schedule_show_id = '$showidval' AND schedule_show_type < '2' AND `schedule_start` < '" . $date . " 00:00:00' ORDER BY `schedule_start` DESC");
+      }
+      $dbreplaylist = $replayquery->fetchAll();
+      $replayidlist = array(0);
+
+      for ($i=0;$i<sizeof($dbreplaylist);$i++) {
+        $replayidlist[] = $dbreplaylist[$i]->schedule_id;
+        if ($i == ($form_state['values']['show_replay_orig']-1)) {
+          $replaystart = $dbreplaylist[$i]->schedule_start;
+        }
+      }
+
+    } else {
+      $replayidlist = array(0);
+    }
+    
+    // As we're regenerating the replay list, we need to check it hasn't been changed as a result of someone else's work
+    $dontcontinue = true;
+    if ($form_state['values']['show_type'] == 2) {
+      if ($replaystart != "") {
+        $replay = date("l, jS F Y - H:i",strtotime($replaystart));
+        $replaycomp = $form['schedule_edit']['show_replay_orig']['#options'][$form_state['values']['show_replay_orig']];
+        if ($replay == $replaycomp) {
+          $dontcontinue = false;
+        }
+      }
+    } else {
+      $dontcontinue = false;
+    }
+    
+    
+    if ($dontcontinue) {
+      drupal_set_message(t("Error checking replay ID. Please try again"), "error");
+    } else {
+    //$date_timestamp = strtotime($form_state['values']['schedule_date_selection']['date_values'][$form_state['values']['schedule_date_selection']['date_select']]);
+    $fields = array('schedule_start' => $date . " " . $time, 'schedule_title' => $form_state['values']['name'], 'schedule_image' => $form_state['values']['image'], 'schedule_minisite' => $form_state['values']['minisite'], 'schedule_email' => $form_state['values']['email'], 'schedule_forum' => $form_state['values']['forum'], 'schedule_description' => $form_state['values']['description'], 'schedule_uid' => $form_state['values']['dj_id_list'][$form_state['values']['dj_id']], 'schedule_show_id' => $form_state['values']['show_id_list'][$form_state['values']['show_id']], 'schedule_show_type' => $form_state['values']['show_type'], 'schedule_filename' => $form_state['values']['filename'], 'schedule_theme' => $form_state['values']['theme'], 'schedule_replay_orig_id' => $replayidlist[$form_state['values']['show_replay_orig']]);
+    if ($form_state['values']['id'] == 0) {
+      $eventquery = db_query("SELECT * FROM {otc_schedule} WHERE `schedule_start` = '$date $time'");
+      $dbeventlist = $eventquery->fetchAll();
+      if (sizeof($dbeventlist) > 0) {
+        drupal_set_message(t("An event already exists for " . strftime("%H:%M",$time_timestamp) . " on " . strftime("%d/%m/%Y",$date_timestamp) . ". Please edit the current event instead."), "error");
+      } else {
+        db_insert('otc_schedule')->fields($fields)->execute();
+        drupal_set_message(t("Successfully added new schedule event at " . strftime("%H:%M",$time_timestamp) . " on " . strftime("%d/%m/%Y",$date_timestamp)));
+      }
+    } else {
+      $replaycheck = db_query("SELECT schedule_start FROM {otc_schedule} WHERE schedule_replay_orig_id = '" . $form_state['values']['id'] . "' LIMIT 1");
+      $replaylist = $replaycheck->fetchAll();
+      $nocontinue = false;
+      if (sizeof($replaylist) > 0) {
+        if (($form_state['values']['dj_id_list'][$form_state['values']['dj_id']] != $form_state['values']['dj_id_list'][$form['schedule_edit']['dj_id']['#default_value']]) OR ($form_state['values']['show_id_list'][$form_state['values']['show_id']] != $form_state['values']['show_id_list'][$form['schedule_edit']['show_id']['#default_value']])) {
+          drupal_set_message(t("Could not update the schedule. This event is referenced by a replay on " . date("d/m/Y H:i",strtotime($replaylist[0]->schedule_start))) . " and therefore must have no DJ or show changes", "error");
+          $nocontinue = true;
+        } else if (($form_state['values']['show_type'] != 0) AND ($form_state['values']['show_type'] != 1)) {
+          drupal_set_message(t("Could not update the schedule. This event is referenced by a replay on " . date("d/m/Y H:i",strtotime($replaylist[0]->schedule_start))) . " and therefore must be live or pre-recorded", "error");
+          $nocontinue = true;
+        }
+      }
+      if (!$nocontinue) {
+        db_update('otc_schedule')->condition('schedule_id', $form_state['values']['id'])->fields($fields)->execute();
+        drupal_set_message(t("Successfully edited schedule event at " . strftime("%H:%M",$time_timestamp) . " on " . strftime("%d/%m/%Y",$date_timestamp)));
+      }
+    }
+    }
+}
+
+function offthechart_schedule_admin_prevday($form, &$form_state) {
+    $bst = false;
+    //$schedule_timestamp = strtotime($form_state['values']['schedule_date_selection']['date_values'][$form_state['values']['schedule_date_selection']['date_select']]);
+    $schedule_timestamp = strtotime($form_state['values']['schedule_date_selection']['date_select'] . " 00:00:00");
+    if ($schedule_timestamp % 86400 == 82800) {
+      $bst = true;
+    }
+    $today = date("Y-m-d");
+    $today = $today . " 00:00:00";
+    if ($schedule_timestamp <= strtotime($today)) {
+      drupal_set_message("You cannot overwrite days which have already happened or started", "error");
+    } else {
+      $schedule_date = strftime("%Y-%m-%d", $schedule_timestamp) . " 00:00:00";
+      $schedule_date_advance = strftime("%Y-%m-%d",$schedule_timestamp+86400) . " 00:00:00";
+      
+      $replayids = db_query("SELECT schedule_id FROM {otc_schedule} WHERE schedule_start >= '$schedule_date' AND schedule_start < '$schedule_date_advance'");
+      $replaychecklist = $replayids->fetchAll();
+      $idlist = array();
+      for ($i=0;$i<sizeof($replaychecklist);$i++) {
+        $idlist[] = $replaychecklist[$i]->schedule_id;
+      }
+      $nocontinue = false;
+      for ($i=0;$i<sizeof($idlist);$i++) {
+        $replaycheck = db_query("SELECT schedule_start FROM {otc_schedule} WHERE schedule_replay_orig_id = '" . $form_state['values']['id'] . "' LIMIT 1");
+        $replaylist = $replaycheck->fetchAll();
+        if (sizeof($replaylist) > 0) {
+          $nocontinue = true;
+        }
+      }
+      
+      if ($nocontinue) {
+        drupal_set_message(t("You cannot overwrite this day as events already present on it are referenced by replays in the future"),"error");
+      } else {
+        $bstoffset = 0;
+        // Remove existing entries for this date
+        db_delete('otc_schedule')->condition('schedule_start', $schedule_date, '>=')->condition('schedule_start', $schedule_date_advance, '<')->execute();
+        if (strtotime(strftime("%Y-%m-%d", $schedule_timestamp-86400) . " 00:00:00") % 86400 == 0 AND $bst) {
+          // Copying from a GMT time into a BST time
+          $bstoffset = 3600;
+        } else if (strtotime(strftime("%Y-%m-%d", $schedule_timestamp-86400) . " 00:00:00") % 86400 == 82800 AND !$bst) {
+          // Copying from a BST time into a GMT time
+          $bstoffset = -3600;
+        }
+        $schedule_date_advance = $schedule_date;
+        $schedule_date = strftime("%Y-%m-%d", $schedule_timestamp-86400+$bstoffset) . " 00:00:00";
+
+        $eventquery = db_query("SELECT * FROM {otc_schedule} WHERE `schedule_start` >= '$schedule_date' AND `schedule_start` < '$schedule_date_advance' ORDER BY `schedule_start`");
+        $dbeventlist = $eventquery->fetchAll();
+        $hittzchange = false;
+        if (sizeof($dbeventlist) > 0) {
+          for ($i=0;$i<sizeof($dbeventlist);$i++) {
+            $olddate = strtotime($dbeventlist[$i]->schedule_start);
+            if ($hittzchange) {
+              $olddate += $bstoffset;
+            } else if ($bstoffset == 3600 AND ($olddate % 86400 >= 3600)) { // After 2am BST
+              $olddate += $bstoffset;
+            } else if ($bstoffset == -3600 AND ($olddate % 86400 >= 3600) AND ($olddate % 86400 < 82800)) { // After 1am GMT
+              $olddate += $bstoffset;
+              $hittzchange = true; // Catches the 11pm
+            }
+            $olddate -= $bstoffset;
+            $newdate = strftime("%Y-%m-%d", $olddate+86400) . " " . substr($dbeventlist[$i]->schedule_start,11);
+            $dbeventlist[$i]->schedule_start = $newdate;
+            foreach ($dbeventlist[$i] as $key => $value) {
+              if ($key == "schedule_replay_orig_id") {
+                $fields[$key] = 0;
+              } else if ($key == "schedule_playlisted") {
+                $fields[$key] = 0;
+              } else if ($key == "schedule_playlist_draft") {
+                $fields[$key] = 0;
+              } else if ($key != "schedule_id") {
+                $fields[$key] = $value;
+              }
+            }
+            db_insert('otc_schedule')->fields($fields)->execute();
+          }
+        }
+      }
+
+      drupal_set_message(t("Successfully copied events from " . strftime("%d/%m/%Y", $schedule_timestamp-86400+$bstoffset) . " to " . strftime("%d/%m/%Y", $schedule_timestamp)));
+    }
+}
+
+function offthechart_schedule_admin_prevweek($form, &$form_state) {
+    $bst = false;
+    //$schedule_timestamp = strtotime($form_state['values']['schedule_date_selection']['date_values'][$form_state['values']['schedule_date_selection']['date_select']]);
+    $schedule_timestamp = strtotime($form_state['values']['schedule_date_selection']['date_select'] . " 00:00:00");
+    if ($schedule_timestamp % 86400 == 82800) {
+      $bst = true;
+    }
+    $today = date("Y-m-d");
+    $today = $today . " 00:00:00";
+    if ($schedule_timestamp <= strtotime($today)) {
+      drupal_set_message("You cannot overwrite days which have already happened or started", "error");
+    } else {
+      $schedule_date = strftime("%Y-%m-%d", $schedule_timestamp) . " 00:00:00";
+      $schedule_date_advance = strftime("%Y-%m-%d",$schedule_timestamp+86400) . " 00:00:00";
+      
+      $replayids = db_query("SELECT schedule_id FROM {otc_schedule} WHERE schedule_start >= '$schedule_date' AND schedule_start < '$schedule_date_advance'");
+      $replaychecklist = $replayids->fetchAll();
+      $idlist = array();
+      for ($i=0;$i<sizeof($replaychecklist);$i++) {
+        $idlist[] = $replaychecklist[$i]->schedule_id;
+      }
+      $nocontinue = false;
+      for ($i=0;$i<sizeof($idlist);$i++) {
+        $replaycheck = db_query("SELECT schedule_start FROM {otc_schedule} WHERE schedule_replay_orig_id = '" . $form_state['values']['id'] . "' LIMIT 1");
+        $replaylist = $replaycheck->fetchAll();
+        if (sizeof($replaylist) > 0) {
+          $nocontinue = true;
+        }
+      }
+      
+      if ($nocontinue) {
+        drupal_set_message(t("You cannot overwrite this day as events already present on it are referenced by replays in the future"),"error");
+      } else {
+        $bstoffset = 0;
+        // Remove existing entries for this date
+        db_delete('otc_schedule')->condition('schedule_start', $schedule_date, '>=')->condition('schedule_start', $schedule_date_advance, '<')->execute();
+        if (strtotime(strftime("%Y-%m-%d", $schedule_timestamp-(86400*7)) . " 00:00:00") % 86400 == 0 AND $bst) {
+          // Copying from a GMT time into a BST time
+          $bstoffset = 3600;
+        } else if (strtotime(strftime("%Y-%m-%d", $schedule_timestamp-(86400*7)) . " 00:00:00") % 86400 == 82800 AND !$bst) {
+          // Copying from a BST time into a GMT time
+          $bstoffset = -3600;
+        }
+        $schedule_date = strftime("%Y-%m-%d", $schedule_timestamp-(86400*7)+$bstoffset) . " 00:00:00";
+        $schedule_date_advance = strftime("%Y-%m-%d", $schedule_timestamp-(86400*6)+$bstoffset) . " 00:00:00";
+        if ($schedule_date_advance == $schedule_date) { // Copying from the day which the BST to GMT change happened on
+          $schedule_date_advance = strftime("%Y-%m-%d", $schedule_timestamp-(86400*6)) . " 00:00:00";
+        }
+
+        $eventquery = db_query("SELECT * FROM {otc_schedule} WHERE `schedule_start` >= '$schedule_date' AND `schedule_start` < '$schedule_date_advance' ORDER BY `schedule_start`");
+        $dbeventlist = $eventquery->fetchAll();
+        $hittzchange = false;
+        if (sizeof($dbeventlist) > 0) {
+          for ($i=0;$i<sizeof($dbeventlist);$i++) {
+            $olddate = strtotime($dbeventlist[$i]->schedule_start);
+            if ($hittzchange) {
+              $olddate += $bstoffset;
+            } else if ($bstoffset == 3600 AND ($olddate % 86400 >= 3600)) { // After 2am BST
+              $olddate += $bstoffset;
+            } else if ($bstoffset == -3600 AND ($olddate % 86400 >= 3600) AND ($olddate % 86400 < 82800)) { // After 1am GMT
+              $olddate += $bstoffset;
+              $hittzchange = true; // Catches the 11pm
+            }
+            $olddate -= $bstoffset;
+            $newdate = strftime("%Y-%m-%d", $olddate+(86400*7)) . " " . substr($dbeventlist[$i]->schedule_start,11);
+            $dbeventlist[$i]->schedule_start = $newdate;
+            foreach ($dbeventlist[$i] as $key => $value) {
+              if ($key == "schedule_replay_orig_id") {
+                $fields[$key] = 0;
+              } else if ($key == "schedule_playlisted") {
+                $fields[$key] = 0;
+              } else if ($key == "schedule_playlist_draft") {
+                $fields[$key] = 0;
+              } else if ($key != "schedule_id") {
+                $fields[$key] = $value;
+              }
+            }
+            db_insert('otc_schedule')->fields($fields)->execute();
+          }
+        }
+      }
+
+      drupal_set_message(t("Successfully copied events from " . strftime("%d/%m/%Y", $schedule_timestamp-(86400*7)+$bstoffset) . " to " . strftime("%d/%m/%Y", $schedule_timestamp)));
+    }
+}
+
+function offthechart_schedule_admin_delete($form, &$form_state) {
+    $date = strtotime($form_state['values']['schedule_date_selection']['date_select']);
+    $time = strtotime($form_state['values']['time_values'][$form_state['values']['time_select']]);
+    
+    $replaycheck = db_query("SELECT schedule_start FROM {otc_schedule} WHERE schedule_replay_orig_id = '" . $form_state['values']['id'] . "' LIMIT 1");
+    $replaylist = $replaycheck->fetchAll();
+    if (sizeof($replaylist) > 0) {
+      drupal_set_message(t("Could not update the schedule. This event is referenced by a replay on " . date("d/m/Y H:i",strtotime($replaylist[0]->schedule_start))), "error");
+    } else {
+      $timebits = strftime("%H:%M:%S",$time);
+      $datebits = strftime("%Y-%m-%d",$date);
+      $fulldate = $datebits . " " . $timebits;
+      //drupal_set_message($fulldate);
+      if (strtotime($fulldate) <= time()) {
+        drupal_set_message(t("You can't delete shows which have already started."),"error");
+      } else {
+        db_delete('otc_schedule')->condition('schedule_id', $form_state['values']['id'])->execute();
+        drupal_set_message(t("Successfully removed schedule event at " . strftime("%H:%M",$time) . " on " . strftime("%d/%m/%Y",$date)));
+      }
+    }
+}
+
+function offthechart_schedule_admin_unlock($form, &$form_state) {
+    if ($form_state['values']['playlist'] == 1) {
+	$fields = array('schedule_playlisted' => 0, 'schedule_playlist_draft' => 0);
+    } else {
+        $fields = array('schedule_playlisted' => 0, 'schedule_playlist_draft' => $form_state['values']['playlist']);
+    }
+    db_update('otc_schedule')->condition('schedule_id', $form_state['values']['id'])->fields($fields)->execute();
+    drupal_set_message(t("Successfully unlocked playlist for editing"));
+}
+
+// Admin interface servers page
+function offthechart_server_admin($form, &$form_state) {
+
+  unset($form_state["input"]);
+
+  $server_id = 0;
+  $serverlist = array("Add a new server");
+  $listquery = db_query("SELECT server_name, server_id, server_ip, server_active FROM {otc_servers} ORDER BY server_name");
+
+  $dbserverlist = $listquery->fetchAll();
+
+  /*$dnsresult = dns_get_record('offthechart.dyndns.org',DNS_A);
+  if (!isset($dnsresult[0]['ip'])) {
+    $dnsresult[0]['ip'] = False;
+    if (!isset($form_state['values'])) {
+      drupal_set_message(t("Error: Could not determine the active server via DNS"), 'warning');
+    }
+  }*/
+
+  $activeserver = 0;
+  
+  for ($i=0;$i<sizeof($dbserverlist);$i++) {
+    if ($dbserverlist[$i]->server_active == 1) {
+	$activeserver = $dbserverlist[$i]->server_id;
+	$serverlist[] = $dbserverlist[$i]->server_name . " (On Air)";
+    } else {
+	$serverlist[] = $dbserverlist[$i]->server_name;
+    }
+    /*if ($dnsresult[0]['ip'] == $dbserverlist[$i]->server_ip) {
+      $serverlist[] = $dbserverlist[$i]->server_name . " (DNS Active)";
+    } else {
+      $serverlist[] = $dbserverlist[$i]->server_name;
+    }*/
+    if (isset($form_state['values'])) {
+      if ($i == $form_state['values']['server_selection']['select'] - 1) {
+        $server_id = $dbserverlist[$i]->server_id;
+      }
+    }
+  }
+
+  if ($activeserver == 0) {
+      drupal_set_message(t("Error: Could not determine the on air server"), 'warning');
+  }
+
+  if ($server_id != 0) {
+    $fieldquery = db_query("SELECT * FROM {otc_servers} WHERE `server_id` = '$server_id'");
+    $dbfieldlist = $fieldquery->fetchAll();
+    $dbfieldlist = array($dbfieldlist[0]->server_name,$dbfieldlist[0]->server_ip,$dbfieldlist[0]->server_port,$dbfieldlist[0]->server_username,$dbfieldlist[0]->server_password,$dbfieldlist[0]->server_db_name,$dbfieldlist[0]->server_daily_sync);
+  } else {
+    $dbfieldlist = array(False, False, False, False, False, False, False);
+  }
+
+  //TODO: Try to get selection box to stay on what was selected before submission
+
+  $form['server_selection'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('OTC servers'),
+    '#prefix' => '<div id="selection-div">',
+    '#suffix' => '</div>',
+    '#tree' => TRUE,
+    '#description' => t('Please select a server to edit'),
+  );
+  $form['server_selection']['select'] = array(
+    '#type' => 'select',
+    '#options' => $serverlist,
+    '#ajax' => array(
+      'callback' => 'offthechart_server_admin_callback',
+      'wrapper' => 'entry-div',
+      'method' => 'replace',
+      'effect' => 'fade',
+    ),
+  );
+
+  $actiondesc = "adding a new server<br />WARNING: Don't do this if a server is moving location and keeping the same music collection.<br />";
+  if ($dbfieldlist[0]) {
+    $actiondesc = "editing '" . $dbfieldlist[0] . "'";
+  }
+  $form['server_edit'] = array(
+      '#title' => t("Currently " . $actiondesc),
+      '#prefix' => '<div id="entry-div">',
+      '#suffix' => '</div>',
+      '#type' => 'fieldset',
+  );
+  if ($dbfieldlist[0]) {
+    $form['server_edit']['syncnow'] = array(
+      '#type' => 'submit',
+      '#default_value' => t('Sync Server'),
+      '#attributes' => array('onclick' => "this.form.target='_blank';return true;"),
+      '#submit' => array('offthechart_server_admin_sync'),
+    );
+    $form['server_edit']['viewschedule'] = array(
+      '#type' => 'submit',
+      '#default_value' => t('View Scheduled Events'),
+      '#attributes' => array('onclick' => "this.form.target='_blank';return true;"),
+      '#submit' => array('offthechart_server_admin_view_events'),
+    );
+    $form['server_edit']['startencoders'] = array(
+      '#type' => 'submit',
+      '#default_value' => t('Start Encoders'),
+      '#attributes' => array('onclick' => "this.form.target='';return true;"),
+      '#submit' => array('offthechart_server_admin_start_encoders'),
+    );
+    $form['server_edit']['stopencoders'] = array(
+      '#type' => 'submit',
+      '#default_value' => t('Stop Encoders'),
+      '#attributes' => array('onclick' => "this.form.target='';return true;"),
+      '#submit' => array('offthechart_server_admin_stop_encoders'),
+    );
+    if ($activeserver != $server_id) {
+      $form['server_edit']['updatedns'] = array(
+        '#type' => 'submit',
+        '#default_value' => t('Set As On Air'),
+        '#attributes' => array('onclick' => "this.form.target='';return true;"),
+        '#submit' => array('offthechart_server_admin_update_dns'),
+      );
+    }
+  }
+
+  $form['server_edit']['id'] = array(
+      '#type' => 'value',
+      '#value' => $server_id,
+  );
+  $form['server_edit']["name"] = array(
+      '#type' => 'textfield',
+      '#title' => "Server name",
+      '#required' => True,
+      '#default_value' => $dbfieldlist[0],
+  );
+  $form['server_edit']["ip"] = array(
+      '#type' => 'textfield',
+      '#title' => "IP",
+      '#required' => True,
+      '#default_value' => $dbfieldlist[1],
+  );
+  $form['server_edit']["port"] = array(
+      '#type' => 'textfield',
+      '#title' => "Port",
+      '#required' => True,
+      '#default_value' => $dbfieldlist[2],
+  );
+  $form['server_edit']["username"] = array(
+      '#type' => 'textfield',
+      '#title' => "Username",
+      '#required' => True,
+      '#default_value' => $dbfieldlist[3],
+  );
+  $form['server_edit']["password"] = array(
+      '#type' => 'textfield', //TODO: Turn back to password, but ensure autofill works
+      '#title' => "Password",
+      '#required' => True,
+      '#default_value' => $dbfieldlist[4],
+  );
+  //if ($dbfieldlist[0]) {
+  //  $form['server_edit']["password"]['#description'] = "Please re-enter this value to allow editing or deletion";
+  //}
+  
+  
+  $form['server_edit']["dbname"] = array(
+      '#type' => 'textfield',
+      '#title' => "Database name",
+      '#required' => True,
+      '#default_value' => $dbfieldlist[5],
+  );
+  
+  $form['server_edit']["sync"] = array(
+      '#type' => 'checkbox',
+      '#title' => "Daily schedule sync",
+      '#default_value' => $dbfieldlist[6],
+  );
+
+  $form['server_edit']['save'] = array(
+      '#type' => 'submit',
+      '#default_value' => t('Save Changes'),
+      '#attributes' => array('onclick' => "this.form.target='';return true;"),
+  );
+/*  if ($dbfieldlist[0]) {
+    $form['server_edit']['delete'] = array(
+        '#type' => 'submit',
+        '#default_value' => t('Delete Server'),
+        '#attributes' => array('onclick' => "this.form.target='';return true;"),
+        '#submit' => array('offthechart_server_admin_delete'),
+    );
+  }*/
+
+  return $form;
+}
+
+function offthechart_server_admin_validate($form, &$form_state) {
+  // TODO: Complete validation throughout forms - particularly schedule (dj or show must be selected unless automated - or replay?)
+  if (!is_numeric($form_state['values']['port'])) {
+    form_set_error('port', t('Server port must be a number.'));
+  }
+}
+
+function offthechart_server_admin_callback($form, &$form_state) {
+  return $form['server_edit'];
+}
+
+function offthechart_server_admin_submit($form, &$form_state) {
+    $fields = array('server_name' => $form_state['values']['name'], 'server_ip' => $form_state['values']['ip'], 'server_port' => $form_state['values']['port'], 'server_username' => $form_state['values']['username'], 'server_password' => $form_state['values']['password'], 'server_db_name' => $form_state['values']['dbname'], 'server_daily_sync' => $form_state['values']['sync']);
+    if ($form_state['values']['id'] == 0) {
+      db_insert('otc_servers')->fields($fields)->execute();
+      drupal_set_message(t("Successfully added new server '" . $form_state['values']['name'] . "'"));
+    } else {
+      db_update('otc_servers')->condition('server_id', $form_state['values']['id'])->fields($fields)->execute();
+      drupal_set_message(t("Successfully edited server '" . $form_state['values']['name'] . "'"));
+    }
+}
+
+function offthechart_server_admin_delete($form, &$form_state) {
+      db_delete('otc_servers')->condition('server_id', $form_state['values']['id'])->execute();
+      drupal_set_message(t("Successfully removed server '" . $form['server_edit']['name']['#default_value'] . "'"));
+}
+
+function offthechart_server_admin_sync($form, &$form_state) {
+    // May make this call a script in an external window for now - easier to cron it
+    $url = "http://www.offthechartradio.co.uk/broadcastcron.php?cron_key=somekey&server_id=";
+    $url .= $form_state['values']['id'];
+    drupal_goto($url);
+}
+
+function offthechart_server_admin_view_events($form, &$form_state) {
+    // External window / script
+    $url = "http://www.offthechartradio.co.uk/broadcastevents.php?cron_key=somekey&server_id=";
+    $url .= $form_state['values']['id'];
+    drupal_goto($url);
+}
+
+function offthechart_server_admin_start_encoders($form, &$form_state) {
+    $serverid = $form_state['values']['id'];
+    $serverquery = db_query("SELECT server_ip,server_name,server_port,server_username,server_password,server_db_name FROM {otc_servers} WHERE `server_id` = '$serverid' LIMIT 1");
+    $server = $serverquery->fetch();
+    $servername = $server->server_name;
+    $ip = $server->server_ip;
+    $port = $server->server_port;
+    $username = $server->server_username;
+    $password = $server->server_password;
+    $dbname = $server->server_db_name;
+    $db = mysql_connect($ip . ":" . $port, $username, $password);
+    if (!$db) {
+      drupal_set_message(t("Connection to database failed. Please try again"), "error");
+    } else {
+      mysql_select_db($dbname);
+      $query = mysql_query("INSERT INTO otcinstants (`eventtype`, `arg1`) VALUES ('encoders', 'start')");
+      if ($query) {
+        drupal_set_message(t("Successfully sent encoder start command to " . $servername));
+      } else {
+        drupal_set_message(t("Failed to initiate encoder start for " . $servername), "error");
+      }
+    }
+}
+
+function offthechart_server_admin_stop_encoders($form, &$form_state) {
+    $serverid = $form_state['values']['id'];
+    $serverquery = db_query("SELECT server_ip,server_name,server_port,server_username,server_password,server_db_name FROM {otc_servers} WHERE `server_id` = '$serverid' LIMIT 1");
+    $server = $serverquery->fetch();
+    $servername = $server->server_name;
+    $ip = $server->server_ip;
+    $port = $server->server_port;
+    $username = $server->server_username;
+    $password = $server->server_password;
+    $dbname = $server->server_db_name;
+    $db = mysql_connect($ip . ":" . $port, $username, $password);
+    if (!$db) {
+      drupal_set_message(t("Connection to database failed. Please try again"), "error");
+    } else {
+      mysql_select_db($dbname);
+      $query = mysql_query("INSERT INTO otcinstants (`eventtype`, `arg1`) VALUES ('encoders', 'stop')");
+      if ($query) {
+        drupal_set_message(t("Successfully sent encoder stop command to " . $servername));
+      } else {
+        drupal_set_message(t("Failed to initiate encoder stop for " . $servername), "error");
+      }
+    }
+}
+
+function offthechart_server_admin_update_dns($form, &$form_state) {
+    /*// create curl resource
+    $url = "http://username:password@members.dyndns.org/nic/update?hostname=offthechart.dyndns.org&myip=";
+    $url .= $form['server_edit']['ip']['#default_value'];
+    $url .= "&wildcard=NOCHG&mx=NOCHG&backmx=NOCHG";
+    $ch = curl_init();
+    // set url
+    curl_setopt($ch, CURLOPT_URL, $url);
+    //return the transfer as a string
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+    // set user agent
+    $useragent="Off The Chart Radio - Server DNS Updater - 2.0";
+    curl_setopt($ch, CURLOPT_USERAGENT, $useragent);
+    // $output contains the output string
+    $result = curl_exec($ch);
+    // close curl resource to free up system resources
+    curl_close($ch);
+    if (stristr($result,'good ' . $form['server_edit']['ip']['#default_value'])) {
+      drupal_set_message(t("DNS update succeeded: $result"));
+    } else {
+      drupal_set_message(t("DNS update failed: $result"), "error");
+    }*/
+    $fields = array('server_active' => 0);
+    db_update('otc_servers')->fields($fields)->execute();
+    $fields = array('server_active' => 1);
+    db_update('otc_servers')->condition('server_id', $form_state['values']['id'])->fields($fields)->execute();
+    drupal_set_message(t("On air update successful"));
+}
+
+// Admin interface reconnect page
+function offthechart_reconnect_admin($form, &$form_state) {
+
+  unset($form_state["input"]);
+
+  $djrolequery = db_query("SELECT rid, name FROM {role} WHERE `name` = 'DJs' LIMIT 1");
+  $djrole = $djrolequery->fetch();
+  $djrid = $djrole->rid;
+  $djlistquery = db_query("SELECT {users}.uid, {users}.name FROM {users} INNER JOIN {users_roles} ON {users}.uid = {users_roles}.uid WHERE {users_roles}.rid = '$djrid' ORDER BY {users}.name");
+  $djlist = $djlistquery->fetchAll();
+
+  if (sizeof($djlist) > 0) {
+    for ($i=0;$i<sizeof($djlist);$i++) {
+      $djnamelist[] = $djlist[$i]->name;
+      $djidlist[] = $djlist[$i]->uid;
+    }
+  } else {
+    $djnamelist[] = "No DJs found - please add some under the DJs role";
+    $djidlist[] = 0;
+  }
+  
+  $form['dj_selection'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('OTC DJs'),
+    '#prefix' => '<div id="selection-div">',
+    '#suffix' => '</div>',
+    '#tree' => TRUE,
+    '#description' => t('Please select a DJ to reconnect'),
+  );
+  $form['dj_selection']['djname'] = array(
+    '#type' => 'select',
+    '#options' => $djnamelist,
+  );
+  $form['dj_selection']['names'] = array(
+      '#type' => 'value',
+      '#value' => $djnamelist,
+  );
+  $form['dj_selection']['ids'] = array(
+      '#type' => 'value',
+      '#value' => $djidlist,
+  );
+  $form['dj_selection']['reconnect'] = array(
+      '#type' => 'submit',
+      '#default_value' => t('Reconnect'),
+  );
+  return $form;
+}
+
+function offthechart_reconnect_admin_submit($form, &$form_state) {
+  $djname = $form_state['values']['dj_selection']['names'][$form_state['values']['dj_selection']['djname']];
+  $djid = $form_state['values']['dj_selection']['ids'][$form_state['values']['dj_selection']['djname']];
+  // Find custom url, if it doesn't exist, don't pass one to the server (it will use the default one).
+  if ($djid != 0) {
+    $djurlquery = db_query("SELECT {profile_value}.value FROM {profile_value} INNER JOIN {profile_field} ON {profile_value}.fid = {profile_field}.fid WHERE {profile_value}.uid = '$djid' AND {profile_field}.name = 'profile_otc_customurl' LIMIT 1");
+    $djurl = $djurlquery->fetch();
+    if ($djurl != "") {
+      $customurl = $djurl->value;
+    }
+    // TODO: This URL should be in config too
+    $defaulturl = "http://broadcast.offthechart.co.uk:3830/stream";
+    if (isset($customurl)) {
+      $actualurl = $customurl;
+    } else {
+      $actualurl = $defaulturl;
+    }
+
+    $listquery = db_query("SELECT server_name, server_ip, server_port, server_db_name, server_username, server_password, server_active FROM {otc_servers} ORDER BY server_name");
+
+    $dbserverlist = $listquery->fetchAll();
+
+    $activeserver = 0;
+
+    for ($i=0;$i<sizeof($dbserverlist);$i++) {
+      if ($dbserverlist[$i]->server_active == 1) {
+        $activeserver = $dbserverlist[$i]->server_ip;
+        $serverport = $dbserverlist[$i]->server_port;
+        $serverdb = $dbserverlist[$i]->server_db_name;
+        $serveruser = $dbserverlist[$i]->server_username;
+        $serverpass = $dbserverlist[$i]->server_password;
+        break;
+      }
+    }
+
+    if ($activeserver != 0) {
+
+      $db = mysql_connect($activeserver . ":" . $serverport, $serveruser, $serverpass);
+      if (!$db) {
+        drupal_set_message(t("Connection to database failed. Please try again"), "error");
+      } else {
+        mysql_select_db($serverdb);
+        $query = mysql_query("INSERT INTO otcinstants (`eventtype`, `arg1`) VALUES ('reconnect', '$actualurl')");
+        if ($query) {
+          drupal_set_message(t("Successfully initiated reconnection for " . $djname));
+        } else {
+          drupal_set_message(t("Failed to initiate reconnection for " . $djname), "error");
+        }
+      }
+    } else {
+      drupal_set_message(t("Could not determine the active broadcast server in DNS."), "error");
+    }
+  }
+}
+
+function offthechart_menu_page() {
+  $output = '<div class="content">';
+  $output .= '<ul class="admin-list"><li class="leaf">';
+  $output .= '<a href="/admin/settings/offthechart/shows">Edit shows</a>';
+  $output .= '<div class="description">Add, modify or delete an OTC show.</div></li>';
+  $output .= '<li class="leaf">';
+  $output .= '<a href="/admin/settings/offthechart/schedule">Edit schedule</a>';
+  $output .= '<div class="description">Modify the station schedule.</div></li>';
+  $output .= '<li class="leaf">';
+  $output .= '<a href="/admin/settings/offthechart/servers">Edit servers</a>';
+  $output .= '<div class="description">Modify the list of active SAM servers - includes encoder and sync controls.</div></li>';
+  $output .= '<li class="leaf">';
+  $output .= '<a href="/admin/settings/offthechart/reconnect">Reconnect DJ</a>';
+  $output .= '<div class="description">Put a DJ back on air.</div></li>';
+  $output .= '<li class="leaf">';
+  $output .= '<a href="/admin/settings/offthechart/toolbox">Toolbox announcements</a>';
+  $output .= '<div class="description">Modify the announcements section of the DJ toolbox.</div></li>';  
+  $output .= '<li class="leaf">';
+  $output .= '<a href="/admin/settings/offthechart/minisites">Minisite settings</a>';
+  $output .= '<div class="description">Modify the additional styling for presenter pages.</div></li>';  
+  $output .= '<li class="leaf">';
+  $output .= '<a href="/admin/settings/offthechart/artists">Edit artists</a>';
+  $output .= '<div class="description">Modify an artist in the OTC database.</div></li>';
+  $output .= '<li class="leaf">';
+  $output .= '<a href="/admin/settings/offthechart/tracks">Edit tracks</a>';
+  $output .= '<div class="description">Modify a track in the OTC database.</div></li>';
+  $output .= '<li class="leaf">';
+  $output .= '<a href="/admin/settings/offthechart/playlists">Check playlists</a>';
+  $output .= '<div class="description">Find out which DJs are getting behind on their playlisting.</div></li>';
+  $output .= '<li class="leaf">';
+  $output .= '<a href="/admin/settings/offthechart/tlh">Check listening statistics</a>';
+  $output .= '<div class="description">Find out the latest listener figures (updated at 5:30am).</div></li>';
+  $output .= '<li class="leaf">';
+  $output .= '<a href="/admin/settings/offthechart/geo">Check listener locations</a>';
+  $output .= '<div class="description">GeoIP statistics indicating the countries we broadcast to (updated at 5:30am).</div></li>';
+  $output .= '<li class="leaf">';
+  $output .= '<a href="/admin/settings/offthechart/reporting">Generate licensing reports</a>';
+  $output .= '<div class="description">Generate a report of all music played in a chosen month, and to which countries.</div></li>';
+  $output .= '<li class="leaf">';
+  $output .= '<a href="/admin/settings/offthechart/database">Database errors</a>';
+  $output .= '<div class="description">Mostly used by Andy to check stuff isn\'t getting broken.</div></li>';
+  $output .= '</ul></div>';
+  return t($output);
+}
+
+function offthechart_menu() {
+
+  $items = array();
+
+  $items['admin/settings/offthechart'] = array(
+    'title' => 'Station Management',
+    'description' => 'All controls for shows, schedule and servers',
+    'access arguments' => array('access administration pages'),
+    'page callback' => 'offthechart_menu_page',
+    'weight' => '-2',
+    'access callback' => TRUE,
+   );
+
+  $items['admin/settings/offthechart/shows'] = array(
+    'title' => 'Edit shows',
+    'description' => 'Add, modify or delete an OTC show',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('offthechart_shows_admin'),
+    'access arguments' => array('access administration pages'),
+    'weight' => '-1',
+    'type' => MENU_NORMAL_ITEM,
+   );
+   
+  $items['admin/settings/offthechart/schedule'] = array(
+    'title' => 'Edit schedule',
+    'description' => 'Modify the station schedule',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('offthechart_schedule_admin'),
+    'access arguments' => array('access administration pages'),
+    'weight' => '0',
+    'type' => MENU_NORMAL_ITEM,
+   );
+   
+  $items['admin/settings/offthechart/servers'] = array(
+    // include view events, encoder, dns and sync buttons here
+    'title' => 'Edit SAM servers',
+    'description' => 'Modify the list of active SAM servers',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('offthechart_server_admin'),
+    'access arguments' => array('access administration pages'),
+    'weight' => '1',
+    'type' => MENU_NORMAL_ITEM,
+   );
+   
+  $items['admin/settings/offthechart/reconnect'] = array(
+    // DJ reconnections
+    'title' => 'Reconnect DJ',
+    'description' => 'Put a DJ back on air',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('offthechart_reconnect_admin'),
+    'access arguments' => array('access administration pages'),
+    'weight' => '2',
+    'type' => MENU_NORMAL_ITEM,
+   );
+   
+   $items['admin/settings/offthechart/toolbox'] = array(
+    'title' => 'Toolbox announcements',
+    'description' => 'Modify the announcements section of the DJ toolbox',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('offthechart_toolbox_admin'),
+    'access arguments' => array('access administration pages'),
+    'weight' => '3',
+    'type' => MENU_NORMAL_ITEM,
+   );
+   
+   $items['admin/settings/offthechart/minisites'] = array(
+    'title' => 'Minisite settings',
+    'description' => 'Modify the additional styling for presenter pages',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('offthechart_minisite_admin'),
+    'access arguments' => array('access administration pages'),
+    'weight' => '4',
+    'type' => MENU_NORMAL_ITEM,
+   );
+   
+   $items['admin/settings/offthechart/artists'] = array(
+    // Artist editing
+    'title' => 'Edit artists',
+    'description' => 'Modify an artist in the OTC database',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('offthechart_artist_admin'),
+    'access arguments' => array('access administration pages'),
+    'weight' => '5',
+    'type' => MENU_NORMAL_ITEM,
+   );
+   
+   $items['admin/settings/offthechart/tracks'] = array(
+    // Track editing
+    'title' => 'Edit tracks',
+    'description' => 'Modify a track in the OTC database',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('offthechart_track_admin'),
+    'access arguments' => array('access administration pages'),
+    'weight' => '6',
+    'type' => MENU_NORMAL_ITEM,
+   );
+   
+   $items['admin/settings/offthechart/playlists'] = array(
+    // Playlist checking
+    'title' => 'Check playlists',
+    'description' => 'Find out which DJs are getting behind on their playlisting',
+    'access arguments' => array('access administration pages'),
+    'page callback' => 'offthechart_playlist_admin',
+    'weight' => '7',
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+   );
+   
+   $items['admin/settings/offthechart/tlh'] = array(
+    // TLH checking
+    'title' => 'Check listening statistics',
+    'description' => 'Find out the latest listener figures (updated at 5:30am)',
+    'access arguments' => array('access administration pages'),
+    'page callback' => 'offthechart_tlh_admin',
+    'weight' => '8',
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+   );
+
+   $items['admin/settings/offthechart/geo'] = array(
+    // Geo IP
+    'title' => 'Check listener locations',
+    'description' => 'GeoIP statistics indicating the countries we broadcast to (updated at 5:30am)',
+    'access arguments' => array('access administration pages'),
+    'page callback' => 'offthechart_geo_admin',
+    'weight' => '9',
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+   );
+
+   $items['admin/settings/offthechart/reporting'] = array(
+    // Music reporting
+    'title' => 'Generate licensing reports',
+    'description' => 'Generate a report of all music played in a chosen month, and to which countries',
+    'page callback' => 'drupal_get_form',
+    'access arguments' => array('access administration pages'),
+    'page arguments' => array('offthechart_reporting_admin'),
+    'weight' => '10',
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+   );
+   
+   $items['admin/settings/offthechart/database'] = array(
+    // Database Errors
+    'title' => 'Database errors',
+    'description' => 'Mostly used by Andy to check stuff isn\'t getting broken',
+    'access arguments' => array('access administration pages'),
+    'page callback' => 'offthechart_database_admin',
+    'weight' => '11',
+    'access callback' => TRUE,
+    'type' => MENU_NORMAL_ITEM,
+   );
+
+  return $items;
+}
+
+// Toolbox admin
+function offthechart_toolbox_admin($form, &$form_state) {
+
+  unset($form_state['input']);
+  
+  $filename = "toolbox/announcement.txt";
+  $fh = @fopen($filename,"r");
+  $textstring = "";
+  if ($fh) {
+    $textstring = fread($fh, filesize($filename));
+    fclose($fh);
+  } else {
+    drupal_set_message(t("Could not read from announcements file"),"error");
+  }
+  
+  $form['toolbox'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('DJ Toolbox Settings'),
+    '#prefix' => '<div id="announcement-div">',
+    '#suffix' => '</div>',
+    '#tree' => TRUE,
+  );
+  
+  $form['toolbox']["announcements"] = array(
+      '#type' => 'textfield',
+      '#title' => "Announcements",
+      '#required' => True,
+      '#default_value' => $textstring,
+      '#maxlength' => 250,
+      '#size' => 120,
+      '#description' => t('HTML containing any announcements for the toolbox users.'),
+  );
+  
+  $form['toolbox']["filename"] = array(
+      '#type' => 'value',
+      '#value' => $filename,
+    );
+  
+  $form['toolbox']['save'] = array(
+        '#type' => 'submit',
+        '#value' => t('Save Changes'),
+    );
+  return $form;
+}
+
+function offthechart_toolbox_admin_submit($form, &$form_state) {
+  $filename = $form_state['values']['toolbox']['filename'];
+  $fh = @fopen($filename,"w");
+  $textstring = $form_state['values']['toolbox']['announcements'];
+  if ($fh) {
+    fwrite($fh,$textstring);
+    fclose($fh);
+    drupal_set_message(t("Announcements successfully changed"));
+  } else {
+    drupal_set_message(t("Unable to write to file"),"error");
+  }
+}
+
+// IceCast GeoIP
+function offthechart_geo_admin() {
+  $output = "Top 10 listening hours for countries listed by quarter, for the most recent eight quarters. Countries highlighted in green are included in the PPL licence agreement, red ones are not. AOL users may be mis-reported as US residents.<br /><br />";
+  $currentyear = date("Y");
+  $currentmonth = date("n");
+  $start = 0;
+  switch ($currentmonth) {
+    case 1:
+    case 2:
+    case 3:
+      $start = 1;
+      break;
+    case 4:
+    case 5:
+    case 6:
+      $start = 4;
+      break;
+    case 7:
+    case 8:
+    case 9:
+      $start = 7;
+      break;
+    case 10:
+    case 11:
+    case 12:
+      $start = 10;
+      break;
+  }
+  $range = 8;
+
+  $pplquery = db_query("SELECT geo_code FROM {otc_ppl_countries}");
+  $pplresults = $pplquery->fetchAll();
+  $pplcountries = array();
+
+  for ($i=0;$i<sizeof($pplresults);$i++) {
+    $pplcountries[] = $pplresults[$i]->geo_code;
+  }
+  
+  $relpath = str_replace(DRUPAL_ROOT, '', drupal_get_path('module', 'offthechart'));
+  for ($i=0;$i<$range;$i++) {
+    $startdate = mktime(0,0,0,$start,1,$currentyear);
+    $endmonth = $start + 3;
+    $endyear = $currentyear;
+    if ($endmonth == 13) {
+      $endyear++;
+      $endmonth = 1;
+    }
+    $enddate = mktime(0,0,0,$endmonth,1,$endyear);
+
+    $out = "Q1 ";
+    if ($start == 4) {
+      $out = "Q2 ";
+    } else if ($start == 7) {
+      $out = "Q3 ";
+    } else if ($start == 10) {
+      $out = "Q4 ";
+    }
+
+    $totaltlhquery = db_query("SELECT SUM(listen_seconds) AS seconds FROM {otc_icecast_geo} WHERE log_timestamp >= '$startdate' AND log_timestamp < '$enddate'");
+    $totaltlhresult = $totaltlhquery->fetch();
+
+    $totalsecs = $totaltlhresult->seconds;
+
+    $tlhquery = db_query("SELECT SUM(listen_seconds) AS seconds, geo_code, geo_name FROM {otc_icecast_geo} WHERE log_timestamp >= '$startdate' AND log_timestamp < '$enddate' GROUP BY geo_code ORDER BY seconds DESC LIMIT 10");
+    $tlhresult = $tlhquery->fetchAll();
+
+    $output .= "<div><strong>";
+    $output .= $out . date("Y",mktime(0,0,0,1,1,$currentyear));
+    $output .= "</strong><table><tr style=\"font-weight: bold\"><td>Country Flag</td><td>Country Code</td><td>Country Name</td><td>Total Listener Hours</td><td>Percentage Of Total Listeners</td></tr>";
+
+    for ($j=0;$j<sizeof($tlhresult);$j++) {
+      $secs = $tlhresult[$j]->seconds;
+      $geocode = $tlhresult[$j]->geo_code;
+      $geoname = $tlhresult[$j]->geo_name;
+      $percentage = ($secs / $totalsecs) * 100;
+      if (in_array($geocode,$pplcountries)) {
+        $output .= "<tr style=\"background-color: #CEF6CE\">";
+      } else {
+        $output .= "<tr style=\"background-color: #F6CECE\">";
+      }
+
+      if (file_exists($relpath . "/maxmind_images/" . strtolower($geocode) . ".gif")) {
+        $image = "/" . $relpath . "/maxmind_images/" . strtolower($geocode) . ".gif";
+        $output .= "<td><img src=\"" . $image . "\"></td>";
+      } else {
+        $output .= "<td></td>";
+      }
+      $output .= "<td>" . $geocode . "</td><td>" . $geoname . "</td><td>" . round(($secs / 60 / 60),2) . "</td><td>" . round($percentage,2) . "%</td></tr>";
+    }
+
+    $output .= "</table></div><br />";
+
+    $start = $start - 3;
+    if ($start == -2) {
+      $currentyear--;
+      $start = 10;
+    }
+  }
+  
+  return (t($output));
+}
+
+// Playlist checker
+function offthechart_playlist_admin() {
+  $startdate = "2011-04-22 00:00:00";
+  $replaystartdate = "2012-01-01 00:00:00";
+  $currentdate = date("Y-m-d H:i:s");
+
+  $output = 'Missing playlists are grouped by shows, DJs and then date of show. Yellow highlights indicate at least one week late, with red indicating two weeks late.<br /><br />';
+
+  $replayquery = db_query("SELECT schedule_start,schedule_show_type,schedule_title,schedule_uid,schedule_show_id,schedule_playlist_draft FROM {otc_schedule} WHERE schedule_start > '$replaystartdate' AND schedule_show_type = '2' AND schedule_replay_orig_id = '0' ORDER BY schedule_uid ASC, schedule_show_id ASC, schedule_start ASC");
+
+  $dbreplaylist = $replayquery->fetchAll();
+  
+  $playlistquery = db_query("SELECT schedule_start,schedule_show_type,schedule_title,schedule_uid,schedule_show_id,schedule_playlist_draft FROM {otc_schedule} WHERE schedule_start > '$startdate' AND schedule_start <= '$currentdate' AND schedule_show_type != '2' AND schedule_playlisted = '0' ORDER BY schedule_uid ASC, schedule_show_id ASC, schedule_start ASC");
+
+  $dbplaylistlist = $playlistquery->fetchAll();
+
+  $output .= "<table><tr><td><b>Date</b></td><td><b>Time</b></td><td><b>Show Name</b></td><td><b>DJ Name</b></td><td><b>In Progress?</b></td></tr>";
+  $replaysok = false;
+  $noplaylists = true;
+  for ($j=0;$j<2;$j++) {
+  if ($j == 0) {
+    $dblist = $dbreplaylist;
+    $output .= "<tr><td colspan=\"5\"></td></tr>";
+    $output .= "<tr style=\"border-top: solid #C0C0C0 1px; border-bottom: solid #C0C0C0 1px\"><td colspan=\"5\"><b>REPLAYS (Missing Original Show Links)</b></td></tr>";
+  } else if ($j == 1) {
+    $dblist = $dbplaylistlist;
+    $output .= "<tr><td colspan=\"5\"></td></tr>";
+    $output .= "<tr style=\"border-top: solid #C0C0C0 1px; border-bottom: solid #C0C0C0 1px\"><td colspan=\"5\"><b>ORIGINAL SHOWS</b></td></tr>";
+  } else {
+    break;
+  }
+  $lasttitle = "";
+  $lastuser = "";
+  $lasttimestamp = "";
+  for ($i=0;$i<sizeof($dblist);$i++) {
+    $timestamp = strtotime($dblist[$i]->schedule_start);
+    $datebits = explode(" ",$dblist[$i]->schedule_start);
+    $checkbits = explode("-",$datebits[0]);
+    if (($checkbits[1] < 6) AND ($dblist[$i]->schedule_show_type == 3)) {
+      continue;
+    }
+    $noplaylists = false;
+    
+    $title = $dblist[$i]->schedule_title;
+    $showtitle = "";
+    if ($dblist[$i]->schedule_show_id != 0) {
+      $showquery = db_query("SELECT {otc_shows}.show_title,{users}.name FROM {otc_shows},{users} WHERE {otc_shows}.show_master_uid = {users}.uid AND {otc_shows}.show_id = " . $dblist[$i]->schedule_show_id);
+      $showlist = $showquery->fetch();
+      if ($showlist != "") {
+        if ($title == "") {
+          $title = $showlist->show_title;
+        }
+        $showtitle = $showlist->show_title;
+        $user = $showlist->name;
+      } else {
+        if ($title == "") {
+          $title = "Unknown";
+        }
+        $showtitle = "Unknown";
+        $user = "Unknown";
+      }
+    } else {
+      $userquery = db_query("SELECT name FROM {users} WHERE uid = " . $dblist[$i]->schedule_uid);
+      $userlist = $userquery->fetch();
+      if ($userlist != "") {
+        if ($title == "") {
+          $title = $userlist->name;
+        }
+        $user = $userlist->name;
+      } else {
+        if ($title == "") {
+          $title = "Unknown";
+        }
+        $user = "Unknown";
+      }
+    }
+    if ($j != 0) {
+      if ($lastuser != $user) {
+        if ($lastuser != "") {
+	  $output .= "<tr><td colspan=\"5\"></td></tr>";
+        }
+        if ($user == "") {
+          $printuser = "Unknown / Deleted";
+        } else {
+	  $printuser = $user;
+	  if ($dblist[$i]->schedule_show_id != 0) {
+	    $printuser = $showtitle;
+	  }
+        }
+        $output .= "<tr><td colspan=\"5\"><b>" . $printuser . "</b></td></tr>";
+      }
+    }
+    if (($lasttitle != $title) OR ($lastuser != $user) OR !(($lasttimestamp + 3600) == $timestamp)) {
+      if (time() - strtotime($datebits[0] . " " . $datebits[1]) > 86400*14) {
+	$output .= "<tr style=\"background-color: #FF6666\">";
+      } else if (time() - strtotime($datebits[0] . " " . $datebits[1]) > 86400*7) {
+        $output .= "<tr style=\"background-color: #FFFF66\">";
+      } else {
+        $output .= "<tr>";
+      }
+      $output .= "<td>" . $datebits[0] . "</td><td>" . $datebits[1] . "</td><td>" . $title . "</td><td>" . $user . "</td><td>";
+      if ($j == 0) {
+        $output .= "N/A";
+      } else {
+        if ($dblist[$i]->schedule_playlist_draft > 0) {
+          $playlisttrackquery = db_query("SELECT playlist_unique_id FROM {otc_playlist_tracks} WHERE playlist_id = '" . $dblist[$i]->schedule_playlist_draft . "'");
+          $dbtracklist = $playlisttrackquery->fetchAll();
+          if (sizeof($dbtracklist) > 0) {
+            $output .= "Yes";
+          } else {
+            $output .= "No";
+          }
+        } else {
+          $output .= "No";
+        }
+      }
+      $output .= "</td></tr>";
+    }
+    $lasttitle = $title;
+    $lastuser = $user;
+    $lasttimestamp = $timestamp;
+  }
+if ($noplaylists) {
+    if ($j == 0) {
+      $replaysok = true;
+      $output .= "<tr><td colspan=\"5\" style=\"text-align: center\">What? No missing playlists? It's a miracle!</td></tr>";
+    } else if ($j == 1) {
+      if ($replaysok) {
+        $output .= "<tr><td colspan=\"5\" style=\"text-align: center\">You mean we've got no playlists missing at all? I may faint!<br /><br /></td></tr>";
+      } else {
+        $output .= "<tr><td colspan=\"5\" style=\"text-align: center\">What? No missing playlists? It's a miracle!<br /><br /></td></tr>";
+      }
+    }
+  }
+  }
+  $output .= "</table>";
+
+  return t($output);
+}
+
+function offthechart_tlh_admin() {
+  
+  $output = "Listener hours are calculated ignoring connections of less than 10 seconds. Streams included are '/otchi', '/otcmed', '/otclo', '/otcaacmed' and '/otcaaclo'. Logs stretch from mid-2009.<br /><br />";
+  $output .= "More detailed statistics about listener connections can be found at <a href=\"http://audiostats.offthechartradio.co.uk\" target=\"_blank\">http://audiostats.offthechartradio.co.uk</a> (NB: This uses external software which includes metadata and admin connections. As such, whilst relative months will give a good indication of listener numbers, absolute figures should not be trusted for licensing purposes). Prior to 04/12/11 these statistics also included source, archiver and statistic connections.<br /><br />";
+  $output .= "<table><tr><td style=\"vertical-align: top; width: 50%\">";
+  
+  $output .= "<b>Recent Weeks (starting on Mondays)</b><br />";
+  $output .= "<table><tr><td><b>Week</b></td><td><b>Total Listener Hours</b></td></tr>";
+  $currentweek = date("W");
+  $weektime = time();
+  while (date("N", $weektime) != 1) {
+    $weektime -= 24*60*60;
+  }
+  $range = 14;
+  for ($i=0;$i<$range;$i++) {
+    $endtime = $weektime + 7*24*60*60;
+    $tlhquery = db_query("SELECT SUM(listen_seconds) AS seconds FROM {otc_icecast_processed} WHERE log_timestamp >= '$weektime' AND log_timestamp < '$endtime'");
+    $tlhresult = $tlhquery->fetch();
+    $output .= "<tr><td>Week " . date("W",$weektime) . " (starting " . date("d/m/Y",$weektime) . ")</td><td>";
+    $output .= round($tlhresult->seconds / 60 / 60,2);
+    $output .= "</td></tr>";
+    $weektime -= 7*24*60*60;
+  }
+  $output .= "</table>";
+  
+  $output .= "</td><td style=\"vertical-align: top; width: 50%\">";
+  
+  $output .= "<b>Recent Months</b><br />";
+  $output .= "<table><tr><td><b>Month</b></td><td><b>Total Listener Hours</b></td></tr>";
+  $currentyear = date("Y");
+  $currentmonth = date("n");
+  $range = 14;
+  for ($i=0;$i<$range;$i++) {
+    $startdate = mktime(0,0,0,$currentmonth,1,$currentyear);
+    $endmonth = $currentmonth + 1;
+    $endyear = $currentyear;
+    if ($endmonth == 13) {
+      $endyear++;
+      $endmonth = 1;
+    }
+    $enddate = mktime(0,0,0,$endmonth,1,$endyear);
+    $tlhquery = db_query("SELECT SUM(listen_seconds) AS seconds FROM {otc_icecast_processed} WHERE log_timestamp >= '$startdate' AND log_timestamp < '$enddate'");
+    $tlhresult = $tlhquery->fetch();
+    $output .= "<tr><td>" . date("M Y",mktime(0,0,0,$currentmonth,1,$currentyear)) . "</td><td>";
+    $output .= round($tlhresult->seconds / 60 / 60,2);
+    $output .= "</td></tr>";
+    $currentmonth--;
+    if ($currentmonth == 0) {
+      $currentyear--;
+      $currentmonth = 12;
+    }
+  }
+  $output .= "</table>";
+  
+  $output .= "</td></tr><tr><td style=\"vertical-align: top; width: 50%\">";
+  
+  $output .= "<b>Recent Quarters</b><br />";
+  $output .= "<table><tr><td><b>Quarter</b></td><td><b>Total Listener Hours</b></td></tr>";
+  $currentmonth = date("n");
+  $currentyear = date("Y");
+  $start = 0;
+  switch ($currentmonth) {
+    case 1:
+    case 2:
+    case 3:
+      $start = 1;
+      break;
+    case 4:
+    case 5:
+    case 6:
+      $start = 4;
+      break;
+    case 7:
+    case 8:
+    case 9:
+      $start = 7;
+      break;
+    case 10:
+    case 11:
+    case 12:
+      $start = 10;
+      break;
+  }
+  $range = 8;
+  for ($i=0;$i<$range;$i++) {
+    $startdate = mktime(0,0,0,$start,1,$currentyear);
+    $endmonth = $start + 3;
+    $endyear = $currentyear;
+    if ($endmonth == 13) {
+      $endyear++;
+      $endmonth = 1;
+    }
+    $enddate = mktime(0,0,0,$endmonth,1,$endyear);
+    $tlhquery = db_query("SELECT SUM(listen_seconds) AS seconds FROM {otc_icecast_processed} WHERE log_timestamp >= '$startdate' AND log_timestamp < '$enddate'");
+    $tlhresult = $tlhquery->fetch();
+    $out = "Q1 ";
+    if ($start == 4) {
+      $out = "Q2 ";
+    } else if ($start == 7) {
+      $out = "Q3 ";
+    } else if ($start == 10) {
+      $out = "Q4 ";
+    }
+    $output .= "<tr><td>" . $out . date("Y",mktime(0,0,0,1,1,$currentyear)) . "</td><td>";
+    $output .= round($tlhresult->seconds / 60 / 60,2);
+    $output .= "</td></tr>";
+    $start = $start - 3;
+    if ($start == -2) {
+      $currentyear--;
+      $start = 10;
+    }
+  }
+  $output .= "</table>";
+  
+  $output .= "</td><td style=\"vertical-align: top; width: 50%\">";
+  
+  $output .= "<b>Recent Years</b><br />";
+  $output .= "<table><tr><td><b>Year</b></td><td><b>Total Listener Hours</b></td></tr>";
+  $currentyear = date("Y");
+  $range = 8;
+  while ($currentyear > (date("Y") - $range)) {
+    $startdate = mktime(0,0,0,1,1,$currentyear);
+    $enddate = mktime(0,0,0,1,1,$currentyear+1);
+    $tlhquery = db_query("SELECT SUM(listen_seconds) AS seconds FROM {otc_icecast_processed} WHERE log_timestamp >= '$startdate' AND log_timestamp < '$enddate'");
+    $tlhresult = $tlhquery->fetch();
+    $output .= "<tr><td>" . $currentyear . "</td><td>";
+    $output .= round($tlhresult->seconds / 60 / 60,2);
+    $output .= "</td></tr>";
+    $currentyear--;
+  }
+  $output .= "</table>";
+  
+  $output .= "</td></tr></table>";
+  
+  return t($output);
+}
+
+// Artist editor
+function offthechart_artist_admin($form, &$form_state) {
+
+  unset($form_state['input']);
+
+  $artist_id = 0;
+  $artistlist = array("Please select an artist");
+  $listquery = db_query("SELECT artist_name, artist_id FROM {otc_artists} ORDER BY artist_name");
+
+  $dbartistlist = $listquery->fetchAll();
+
+  for ($i=0;$i<sizeof($dbartistlist);$i++) {
+    $artistlist[] = $dbartistlist[$i]->artist_name;
+    if (isset($form_state['values'])) {
+      if ($i == $form_state['values']['artist_selection']['select'] - 1) {
+        $artist_id = $dbartistlist[$i]->artist_id;
+      }
+    }
+  }
+
+  $form['artist_selection'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('OTC Artists'),
+    '#prefix' => '<div id="selection-div">',
+    '#suffix' => '</div>',
+    '#tree' => TRUE,
+    '#description' => t('Please select an artist'),
+  );
+
+  $form['artist_selection']['select'] = array(
+    '#type' => 'select',
+    '#options' => $artistlist,
+    '#ajax' => array(
+      'callback' => 'offthechart_artist_admin_callback',
+      'wrapper' => 'entry-div',
+      'method' => 'replace',
+      'effect' => 'fade',
+    ),
+  );
+
+  if ($artist_id != 0) {
+    $fieldquery = db_query("SELECT * FROM {otc_artists} WHERE `artist_id` = '$artist_id'");
+    $dbfields = $fieldquery->fetchAll();
+    $dbfieldlist = array($dbfields[0]->artist_name,$dbfields[0]->artist_mbid,$dbfields[0]->artist_twitter,$dbfields[0]->artist_facebook,$dbfields[0]->artist_ppl_name,$dbfields[0]->artist_unsigned);
+
+    $trackquery = db_query("SELECT * FROM {otc_tracks} WHERE `artist_id` = '$artist_id' ORDER BY track_name ASC,track_mix ASC,track_isrc DESC,track_label DESC,track_catno DESC");
+    $dbtracklist = $trackquery->fetchAll();
+    $tracktext = "<table><tr style=\"font-weight: bold\"><td>Title</td><td>Mix</td><td>Duration</td></tr>";
+    for ($i=0;$i<sizeof($dbtracklist);$i++) {
+      $secs = ($dbtracklist[$i]->track_duration) % 60;
+      $mins = (($dbtracklist[$i]->track_duration) - $secs) / 60;
+      $tracktext .= "<tr><td>" . $dbtracklist[$i]->track_name . "</td><td>" . $dbtracklist[$i]->track_mix . "</td><td>" . $mins . "m" . $secs . "s</td></tr>";
+    }
+    $tracktext .= "</table>";
+  } else {
+    $dbfieldlist = array(False,False,False,False,False,False);
+  }
+
+    if ($dbfieldlist[0]) {
+      $actiondesc = "editing '" . $dbfieldlist[0] . "'";
+    } else {
+      $actiondesc = "awaiting artist selection";
+    }
+ 
+    if ($artist_id != 0) {
+      $prefix = '<div id="entry-div"><fieldset class="form-wrapper"><legend><span class="fieldset-legend">Tracks</span></legend><div class="fieldset-wrapper">' . $tracktext . '</div></fieldset>';
+    } else {
+      $prefix = '<div id="entry-div">';
+    }
+
+    $form['artist_edit'] = array(
+        '#title' => t("Currently " . $actiondesc),
+        '#prefix' => $prefix,
+        '#suffix' => '</div>',
+        '#type' => 'fieldset',
+    );
+
+    $form['artist_edit']['id'] = array(
+        '#type' => 'value',
+        '#value' => $artist_id,
+    );
+    
+    /*if (isset($form_state['values']['name'])) {      
+      unset($form_state['input']['name']);
+    }*/
+    $form['artist_edit']["name"] = array(
+      '#type' => 'textfield',
+      '#title' => "Artist name",
+      '#required' => True,
+      '#default_value' => $dbfieldlist[0],
+    );
+    $form['artist_edit']["pplname"] = array(
+      '#type' => 'textfield',
+      '#title' => "Artist PPL name",
+      '#required' => False,
+      '#default_value' => $dbfieldlist[4],
+      '#description' => t('Artist name according to PPL if different from above.'),
+    );
+    $form['artist_edit']["mbid"] = array(
+      '#type' => 'textfield',
+      '#title' => "MusicBrainz ID",
+      '#required' => False,
+      '#default_value' => $dbfieldlist[1],
+    );
+    $form['artist_edit']['unsigned'] = array(
+      '#type' => 'select',
+      '#title' => "Signed / Unsigned artist",
+      '#default_value' => $dbfieldlist[5],
+      '#options' => array("Signed","Unsigned"),
+      '#description' => t('Is the artist signed or unsigned?'),
+    );
+    $form['artist_edit']["twitter"] = array(
+      '#type' => 'textfield',
+      '#title' => "Twitter page",
+      '#required' => False,
+      '#default_value' => $dbfieldlist[2],
+      '#description' => "twitter.com/XXXXXX (normally sourced from BBC - only fill in if blank or incorrect)",
+    );
+    $form['artist_edit']["facebook"] = array(
+      '#type' => 'textfield',
+      '#title' => "Facebook page",
+      '#required' => False,
+      '#default_value' => $dbfieldlist[3],
+      '#description' => "facebook.com/XXXXXX (normally sourced from BBC - only fill in if blank of incorrect)",
+    );
+
+    $mergeartistlist = array("-- None selected --");
+    $mergeidlist = array(0);
+    $mergelistquery = db_query("SELECT artist_name, artist_id FROM {otc_artists} WHERE artist_id != '$artist_id' ORDER BY artist_name");
+
+    $dbartistmergelist = $mergelistquery->fetchAll();
+
+    for ($i=0;$i<sizeof($dbartistmergelist);$i++) {
+      $mergeartistlist[] = $dbartistmergelist[$i]->artist_name;
+      $mergeidlist[] = $dbartistmergelist[$i]->artist_id;
+    }
+
+    $form['artist_edit']["artistids"] = array(
+      '#type' => 'value',
+      '#value' => $mergeidlist,
+    );
+   
+    $form['artist_edit']['merge'] = array(
+      '#title' => 'Merge with',
+      '#type' => 'select',
+      '#options' => $mergeartistlist,
+      '#description' => 'Moves all tracks from the artist in this dropdown into the ownership of the currently edited artist',
+    );
+
+  if ($dbfieldlist[0]) {
+    $form['artist_edit']['save'] = array(
+        '#type' => 'submit',
+        '#value' => t('Save Changes'),
+    );
+  }
+
+  return $form;
+}
+
+function offthechart_artist_admin_callback($form, &$form_state) {
+  return $form['artist_edit'];
+}
+
+function offthechart_artist_admin_submit($form, &$form_state) {
+  $fields = array('artist_name' => $form_state['values']['name'], 'artist_ppl_name' => $form_state['values']['pplname'], 'artist_mbid' => $form_state['values']['mbid'], 'artist_twitter' => $form_state['values']['twitter'], 'artist_facebook' => $form_state['values']['facebook'], 'artist_unsigned' => $form_state['values']['unsigned']);
+  if ($form_state['values']['id'] != 0) {
+    db_update('otc_artists')->condition('artist_id', $form_state['values']['id'])->fields($fields)->execute();
+    drupal_set_message(t("Successfully edited artist '" . $form_state['values']['name'] . "'"));
+
+    // Do merge if needed
+    if ($form_state['values']['artistids'][$form_state['values']['merge']] != 0) {
+      $fields = array('artist_id' => $form_state['values']['id']);
+      db_update('otc_tracks')->condition('artist_id', $form_state['values']['artistids'][$form_state['values']['merge']])->fields($fields)->execute();
+      db_delete('otc_artists')->condition('artist_id', $form_state['values']['artistids'][$form_state['values']['merge']])->execute();
+      drupal_set_message(t("Merge completed"));
+    }
+  }
+}
+
+// Track editor
+function offthechart_track_admin($form, &$form_state) {
+
+  unset($form_state['input']);
+
+  $artist_id = 0;
+  $track_id = 0;
+  $artistlist = array("Please select an artist");
+  $tracklist = array("Please select a track");
+  
+  $listquery = db_query("SELECT artist_name, artist_id FROM {otc_artists} ORDER BY artist_name");
+
+  $dbartistlist = $listquery->fetchAll();
+
+  for ($i=0;$i<sizeof($dbartistlist);$i++) {
+    $artistlist[] = $dbartistlist[$i]->artist_name;
+    if (isset($form_state['values'])) {
+      if ($i == $form_state['values']['artist_selection']['select'] - 1) {
+        $artist_id = $dbartistlist[$i]->artist_id;
+      }
+    }
+  }
+
+  if ($artist_id != 0) {
+    $tracklistquery = db_query("SELECT track_name, track_mix, track_id, track_duration FROM {otc_tracks} WHERE artist_id = '$artist_id' ORDER BY track_name ASC,track_mix ASC,track_isrc DESC,track_label DESC,track_catno DESC");
+
+    $dbtracklist = $tracklistquery->fetchAll();
+
+    for ($i=0;$i<sizeof($dbtracklist);$i++) {
+      $duration = $dbtracklist[$i]->track_duration;
+      $secs = ($duration % 60);
+      $mins = (($duration - $secs) / 60);
+      $duration = " (" . $mins . "m" . $secs . "s)";
+      if ($dbtracklist[$i]->track_mix == "") {
+        $tracklist[] = $dbtracklist[$i]->track_name . $duration;
+      } else {
+        $tracklist[] = $dbtracklist[$i]->track_name . " (" . $dbtracklist[$i]->track_mix . ")" . $duration;
+      }
+      if (isset($form_state['values'])) {
+        if ($i == $form_state['values']['track_selection']['select'] - 1) {
+          if ($artist_id == $form_state['values']['track_edit']['aid']) {
+            $track_id = $dbtracklist[$i]->track_id;
+          }
+        }
+      }
+    }
+  }
+
+  $form['artist_selection'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('OTC Artists'),
+    '#prefix' => '<div id="artist-selection-div">',
+    '#suffix' => '</div>',
+    '#tree' => TRUE,
+    '#description' => t('Please select an artist'),
+  );
+
+  $form['artist_selection']['select'] = array(
+    '#type' => 'select',
+    '#options' => $artistlist,
+    '#ajax' => array(
+      'callback' => 'offthechart_track_admin_artist_callback',
+      'wrapper' => 'track-selection-div',
+      'method' => 'replace',
+      'effect' => 'fade',
+    ),
+  );
+
+  $form['track_selection'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('OTC Tracks'),
+    '#prefix' => '<div id="track-selection-div">',
+    '#suffix' => '',
+    '#tree' => TRUE,
+    '#description' => t('Please select a track'),
+  );
+
+  $form['track_selection']['select'] = array(
+    '#type' => 'select',
+    '#options' => $tracklist,
+    '#ajax' => array(
+      'callback' => 'offthechart_track_admin_track_callback',
+      'wrapper' => 'entry-div',
+      'method' => 'replace',
+      'effect' => 'fade',
+    ),
+  );
+
+  if ($track_id != 0) {
+    $fieldquery = db_query("SELECT * FROM {otc_tracks} WHERE `track_id` = '$track_id'");
+    $dbfieldlist = $fieldquery->fetchAll();
+    $dbfieldlist = array($dbfieldlist[0]->track_name,$dbfieldlist[0]->track_mbid,$dbfieldlist[0]->track_mix,$dbfieldlist[0]->track_duration,$dbfieldlist[0]->track_isrc,$dbfieldlist[0]->track_label,$dbfieldlist[0]->track_catno);
+  } else {
+    $dbfieldlist = array(False,False,False,False,False,False,False);
+  }
+
+    if ($dbfieldlist[0]) {
+      $actiondesc = "editing '" . $dbfieldlist[0] . "'";
+    } else {
+      $actiondesc = "awaiting artist / track selection";
+    }
+
+  $form['track_edit'] = array(
+    '#type' => 'fieldset',
+    '#title' => t("Currently " . $actiondesc),
+    '#prefix' => '<div id="entry-div">',
+    '#suffix' => '</div></div>',
+    '#tree' => TRUE,
+  );
+
+  $form['track_edit']['id'] = array(
+        '#type' => 'value',
+        '#value' => $track_id,
+  );
+  
+  $form['track_edit']['aid'] = array(
+        '#type' => 'value',
+        '#value' => $artist_id,
+  );
+
+  $form['track_edit']["name"] = array(
+      '#type' => 'textfield',
+      '#title' => "Track name",
+      '#required' => True,
+      '#default_value' => $dbfieldlist[0],
+  );
+  $form['track_edit']["mbid"] = array(
+      '#type' => 'textfield',
+      '#title' => "MusicBrainz ID",
+      '#required' => False,
+      '#default_value' => $dbfieldlist[1],
+  );
+  $form['track_edit']["mix"] = array(
+      '#type' => 'textfield',
+      '#title' => "Mix",
+      '#required' => False,
+      '#default_value' => $dbfieldlist[2],
+  );
+  if ($dbfieldlist[3] === False) {
+    $secs = False;
+    $mins = False;
+  } else {
+    $secs = ($dbfieldlist[3]) % 60;
+    $mins = (($dbfieldlist[3]) - $secs) / 60;
+  }
+  $form['track_edit']["mins"] = array(
+      '#type' => 'textfield',
+      '#title' => "Minutes",
+      '#required' => True,
+      '#default_value' => $mins,
+  );
+  $form['track_edit']["secs"] = array(
+      '#type' => 'textfield',
+      '#title' => "Seconds",
+      '#required' => True,
+      '#default_value' => $secs,
+  );
+  $form['track_edit']["isrc"] = array(
+      '#type' => 'textfield',
+      '#title' => "ISRC",
+      '#required' => False,
+      '#default_value' => $dbfieldlist[4],
+  );
+  $form['track_edit']["label"] = array(
+      '#type' => 'textfield',
+      '#title' => "Label",
+      '#required' => False,
+      '#default_value' => $dbfieldlist[5],
+  );
+  $form['track_edit']["catno"] = array(
+      '#type' => 'textfield',
+      '#title' => "Catalogue No.",
+      '#required' => False,
+      '#default_value' => $dbfieldlist[6],
+  );
+
+  $changeartistlist = array("-- None selected --");
+  $changeartistidlist = array(0);
+  if ($artist_id != 0) {
+    $changeartistquery = db_query("SELECT artist_name, artist_id FROM {otc_artists} WHERE artist_id != '$artist_id' ORDER BY artist_name ASC");
+
+    $dbchangeartistlist = $changeartistquery->fetchAll();
+
+    for ($i=0;$i<sizeof($dbchangeartistlist);$i++) {
+        $changeartistlist[] = $dbchangeartistlist[$i]->artist_name;
+        $changeartistidlist[] = $dbchangeartistlist[$i]->artist_id;
+    }
+  }
+
+  $mergetracklist = array("-- None selected --");
+  $mergetrackidlist = array(0);
+  if ($track_id != 0) {
+    $mergetrackquery = db_query("SELECT track_name, track_mix, track_id, track_duration FROM {otc_tracks} WHERE artist_id = '$artist_id' AND track_id != '$track_id' ORDER BY track_name ASC, track_mix ASC,track_isrc DESC,track_label DESC,track_catno DESC");
+
+    $dbmergetracklist = $mergetrackquery->fetchAll();
+
+    for ($i=0;$i<sizeof($dbmergetracklist);$i++) {
+        $duration = $dbmergetracklist[$i]->track_duration;
+        $secs = ($duration % 60);
+        $mins = (($duration - $secs) / 60);
+        $duration = " (" . $mins . "m" . $secs . "s)";
+        if ($dbmergetracklist[$i]->track_mix == "") {
+          $mergetracklist[] = $dbmergetracklist[$i]->track_name . $duration;
+        } else {
+          $mergetracklist[] = $dbmergetracklist[$i]->track_name . " (" . $dbmergetracklist[$i]->track_mix . ")" . $duration;
+        }
+        $mergetrackidlist[] = $dbmergetracklist[$i]->track_id;
+    }
+  }
+
+  $form['track_edit']['merge'] = array(
+      '#title' => 'Merge with',
+      '#type' => 'select',
+      '#options' => $mergetracklist,
+      '#description' => 'Removes the track from this dropdown, keeping its associated playlist entries with the currently edited track. Only use if the title, mix and duration of the tracks being merged match',
+  );
+
+  $form['track_edit']["trackids"] = array(
+      '#type' => 'value',
+      '#value' => $mergetrackidlist,
+    );
+
+  $form['track_edit']['reown'] = array(
+      '#title' => 'Switch artist',
+      '#type' => 'select',
+      '#options' => $changeartistlist,
+      '#description' => 'Moves this track into the posession of the artist selected from this dropdown',
+    );
+  
+  $form['track_edit']["artistids"] = array(
+      '#type' => 'value',
+      '#value' => $changeartistidlist,
+    );
+
+  if ($dbfieldlist[0]) {
+    $form['track_edit']['save'] = array(
+        '#type' => 'submit',
+        '#default_value' => t('Save Changes'),
+    );
+  }
+
+  return $form;
+}
+
+function offthechart_track_admin_artist_callback($form, &$form_state) {
+  return array("track_edit" => $form['track_edit'], "track_selection" => $form['track_selection']);
+}
+
+function offthechart_track_admin_track_callback($form, &$form_state) {
+  return $form['track_edit'];
+}
+
+function offthechart_track_admin_validate($form, &$form_state) {
+  $mins = $form_state['values']['track_edit']['mins'];
+  $secs = $form_state['values']['track_edit']['secs'];
+  if (!is_numeric($mins)) {
+    form_set_error('mins', t('Minutes must be numeric'));
+  } else if (!is_numeric($secs)) {
+    form_set_error('secs', t('Seconds must be numeric'));
+  } else if (($form_state['values']['track_edit']['artistids'][$form_state['values']['track_edit']['reown']] != 0) AND ($form_state['values']['track_edit']['trackids'][$form_state['values']['track_edit']['merge']] != 0)) {
+    form_set_error('', t("You cannot perform both a track merge and change of ownership at the same time"));
+  }
+}
+
+function offthechart_track_admin_submit($form, &$form_state) {
+  $mins = $form_state['values']['track_edit']['mins'];
+  $secs = $form_state['values']['track_edit']['secs'];
+  $duration = ($mins * 60) + $secs;
+  $fields = array('track_name' => $form_state['values']['track_edit']['name'], 'track_mbid' => $form_state['values']['track_edit']['mbid'], 'track_mix' => $form_state['values']['track_edit']['mix'], 'track_duration' => $duration, 'track_isrc' => $form_state['values']['track_edit']['isrc'], 'track_label' => $form_state['values']['track_edit']['label'], 'track_catno' => $form_state['values']['track_edit']['catno']);
+  if ($form_state['values']['track_edit']['id'] != 0) {
+    db_update('otc_tracks')->condition('track_id', $form_state['values']['track_edit']['id'])->fields($fields)->execute();
+    drupal_set_message(t("Successfully edited track '" . $form_state['values']['track_edit']['name'] . "'"));
+
+    // Perform ownership change if needed
+    if ($form_state['values']['track_edit']['artistids'][$form_state['values']['track_edit']['reown']] != 0) {
+      $fields = array('artist_id' => $form_state['values']['track_edit']['artistids'][$form_state['values']['track_edit']['reown']]);
+      db_update('otc_tracks')->condition('track_id', $form_state['values']['track_edit']['id'])->fields($fields)->execute();
+      drupal_set_message(t("Ownership change completed"));
+    }
+
+    // Perform merge if needed
+    if ($form_state['values']['track_edit']['trackids'][$form_state['values']['track_edit']['merge']] != 0) {
+      // Need to check if this track appears in any draft playlists
+      $draftcheck = db_query("SELECT playlist_track_id FROM drup_otc_schedule LEFT JOIN drup_otc_playlist_tracks ON drup_otc_schedule.schedule_playlist_draft = drup_otc_playlist_tracks.playlist_id WHERE playlist_track_id = '" . $form_state['values']['track_edit']['trackids'][$form_state['values']['track_edit']['merge']] . "' AND schedule_playlist_draft != 0");
+      $draftrows = $draftcheck->fetchAll();
+      
+      if (sizeof($draftrows) > 0) {
+        drupal_set_message(t("Unable to perform merge as the merge track appears in a DJ's 'in progress' playlist"),"error");
+      } else {
+        $fields = array('playlist_track_id' => $form_state['values']['track_edit']['id']);
+        db_update('otc_playlist_tracks')->condition('playlist_track_id', $form_state['values']['track_edit']['trackids'][$form_state['values']['track_edit']['merge']])->fields($fields)->execute();
+        $fields = array('track_id' => $form_state['values']['track_edit']['id']);
+        db_update('otc_sam_tracks')->condition('track_id', $form_state['values']['track_edit']['trackids'][$form_state['values']['track_edit']['merge']])->fields($fields)->execute();
+
+        db_delete('otc_tracks')->condition('track_id', $form_state['values']['track_edit']['trackids'][$form_state['values']['track_edit']['merge']])->execute();
+        drupal_set_message(t("Merge completed"));
+      }
+    }
+  }
+}
+
+
+function offthechart_minisite_admin($form, &$form_state) {
+
+  unset($form_state["input"]);
+
+  $page_id = 0;
+  $pagelist = array("Add new minisite settings");
+  $listquery = db_query("SELECT page_url, page_id FROM {otc_minisites} ORDER BY page_url");
+
+  $dbpagelist = $listquery->fetchAll();
+
+  for ($i=0;$i<sizeof($dbpagelist);$i++) {
+    $pagelist[] = $dbpagelist[$i]->page_url;
+    if (isset($form_state['values'])) {
+      if ($i == $form_state['values']['page_selection']['select'] - 1) {
+        $page_id = $dbpagelist[$i]->page_id;
+      }
+    }
+  }
+  
+  $form['page_selection'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('OTC minisites'),
+    '#prefix' => '<div id="selection-div">',
+    '#suffix' => '</div>',
+    '#tree' => TRUE,
+    '#description' => t('Please select a page to edit'),
+  );
+  $form['page_selection']['select'] = array(
+    '#type' => 'select',
+    '#options' => $pagelist,
+    '#ajax' => array(
+      'callback' => 'offthechart_minisite_admin_callback',
+      'wrapper' => 'entry-div',
+      'method' => 'replace',
+      'effect' => 'fade',
+    ),
+  );
+  
+  if ($page_id != 0) {
+    $fieldquery = db_query("SELECT * FROM {otc_minisites} WHERE `page_id` = '$page_id'");
+    $dbfieldlist = $fieldquery->fetchAll();
+    $dbfieldlist = array($dbfieldlist[0]->page_url,$dbfieldlist[0]->font_file,$dbfieldlist[0]->bg_colour,$dbfieldlist[0]->fg_colour);
+  } else {
+    $dbfieldlist = array(False, False, False, False);
+  }
+
+  $actiondesc = "adding new minisite settings";
+  if ($dbfieldlist[0]) {
+    $actiondesc = "editing '" . $dbfieldlist[0] . "'";
+  }
+
+  $form['page_edit'] = array(
+      '#title' => t("Currently " . $actiondesc),
+      '#prefix' => '<div id="entry-div">',
+      '#suffix' => '</div>',
+      '#type' => 'fieldset',
+  );
+  $form['page_edit']['id'] = array(
+      '#type' => 'value',
+      '#value' => $page_id,
+  );
+  $form['page_edit']["url"] = array(
+      '#type' => 'textfield',
+      '#title' => "Minisite URL",
+      '#required' => True,
+      '#default_value' => $dbfieldlist[0],
+      '#description' => 'offthechartradio.co.uk/XXXXXX',
+  );
+  $form['page_edit']["font"] = array(
+      '#type' => 'textfield',
+      '#title' => "Font filename (TTF only!)",
+      '#default_value' => $dbfieldlist[1],
+      '#required' => True,
+      '#description' => '/flir/facelift/fonts/XXXXXX.XXX',
+  );
+  $form['page_edit']["bgcolour"] = array(
+      '#type' => 'textfield',
+      '#title' => "Background colour",
+      '#default_value' => $dbfieldlist[2],
+      '#required' => True,
+      '#description' => 'HTML colour code (e.g. #FFFFFF)',
+  );
+  $defaultcol = 0;
+  if ($dbfieldlist[0]) {
+    if ($dbfieldlist[3] == "#FFFFFF") {
+      $defaultcol = 2;
+    } else if ($dbfieldlist[3] == "#3B3B3B") {
+      $defaultcol = 1;
+    } else {
+      $defaultcol = 0;
+    }
+  }
+  $form['page_edit']["fgcolour"] = array(
+      '#type' => 'select',
+      '#title' => "Text colour",
+      '#options' => array("#000000 (Black)","#3B3B3B (Grey)","#FFFFFF (White)"),
+      '#required' => True,
+      '#default_value' => $defaultcol,
+      '#description' => 'HTML colour code (e.g. #FFFFFF)',
+  );
+
+  $form['page_edit']['save'] = array(
+      '#type' => 'submit',
+      '#default_value' => t('Save Changes'),
+  );
+  if ($dbfieldlist[0]) {
+    $form['page_edit']['delete'] = array(
+        '#type' => 'submit',
+        '#default_value' => t('Delete Settings'),
+	'#submit' => array('offthechart_minisite_admin_delete'),
+    );
+  }
+  
+  return $form;
+}
+
+function offthechart_minisite_admin_validate($form, &$form_state) {
+  if (strlen($form_state['values']['bgcolour']) > 7) {
+    form_set_error('fgcolour', t('You have entered an invalid HTML colour code.'));
+  } else if (strlen($form_state['values']['url']) > 30) {
+    form_set_error('url', t('Your minisite URL is too large (max 30 chars).'));
+  } else if (strlen($form_state['values']['font']) > 30) {
+    form_set_error('font', t('Your font filename is too large (max 30 chars).'));
+  }
+}
+
+function offthechart_minisite_admin_callback($form, &$form_state) {
+  return $form['page_edit'];
+}
+
+function offthechart_minisite_admin_submit($form, &$form_state) {
+  $fgarray = array("#000000","#3B3B3B","#FFFFFF");
+  $fields = array('page_url' => $form_state['values']['url'], 'font_file' => $form_state['values']['font'], 'bg_colour' => $form_state['values']['bgcolour'], 'fg_colour' => $fgarray[$form_state['values']['fgcolour']]);
+
+  if ($form_state['values']['id'] == 0) {
+    db_insert('otc_minisites')->fields($fields)->execute();
+    drupal_set_message(t("Successfully added new minisite settings for '" . $form_state['values']['url'] . "'"));
+  } else {
+    db_update('otc_minisites')->condition('page_id', $form_state['values']['id'])->fields($fields)->execute();
+    drupal_set_message(t("Successfully edited minisite settings for '" . $form_state['values']['url'] . "'"));
+  }
+}
+
+function offthechart_minisite_admin_delete($form, &$form_state) {
+  db_delete('otc_minisites')->condition('page_id', $form_state['values']['id'])->execute();
+  drupal_set_message(t("Successfully removed minisite settings for '" . $form['page_edit']['url']['#default_value'] . "'"));
+}
+
+function offthechart_reporting_admin($form, &$form_state) {
+
+  unset($form_state["input"]);
+  
+  date_default_timezone_set('UTC');
+  
+  $activequarter = 0;
+  $endquarter = 0;
+
+  $currentmonth = date("n");
+  $currentyear = date("Y");
+  $start = 0;
+  switch ($currentmonth) {
+    case 1:
+    case 2:
+    case 3:
+      $start = 1;
+      break;
+    case 4:
+    case 5:
+    case 6:
+      $start = 4;
+      break;
+    case 7:
+    case 8:
+    case 9:
+      $start = 7;
+      break;
+    case 10:
+    case 11:
+    case 12:
+      $start = 10;
+      break;
+  }
+  $range = 8;
+  $options = array("Please select a quarter to view");
+  for ($i=0;$i<$range;$i++) {
+    $startdate = mktime(0,0,0,$start,1,$currentyear);
+    $out = "Q1 ";
+    if ($start == 4) {
+      $out = "Q2 ";
+    } else if ($start == 7) {
+      $out = "Q3 ";
+    } else if ($start == 10) {
+      $out = "Q4 ";
+    }
+    $out .= date("Y",mktime(0,0,0,1,1,$currentyear));
+    $options[] = $out;
+    if (isset($form_state['values']['quarter_selection']['select'])) {
+      if ($i+1 == $form_state['values']['quarter_selection']['select']) {
+        $activequarter = $startdate;
+        $newstart = $start + 3;
+        $newyear = $currentyear;
+        if ($newstart == 13) {
+          $newstart = 1;
+          $newyear++;
+        }
+        $endquarter = mktime(0,0,0,$newstart,1,$newyear);
+      }
+    }
+    $start = $start - 3;
+    if ($start == -2) {
+      $currentyear--;
+      $start = 10;
+    }
+  }
+  
+  $form['quarter_selection'] = array(
+    '#type' => 'fieldset',
+    '#title' => t('OTC licensing'),
+    '#prefix' => '<div id="selection-div">',
+    '#suffix' => '</div>',
+    '#tree' => TRUE,
+  );
+  $form['quarter_selection']['select'] = array(
+    '#type' => 'select',
+    '#options' => $options,
+    '#ajax' => array(
+      'callback' => 'offthechart_reporting_admin_callback',
+      'wrapper' => 'data-div',
+      'method' => 'replace',
+      'effect' => 'fade',
+    ),
+  );
+  
+  $entryselected = false;
+  if (isset($form_state['values']['quarter_selection']['select'])) {
+    if ($form_state['values']['quarter_selection']['select'] != 0) {
+      $entryselected = $form['quarter_selection']['select']['#options'][$form_state['values']['quarter_selection']['select']];
+    }
+  }
+  $actiondesc = "awaiting quarter selection";
+  $errorlist = "Please select a quarter from above to continue...";
+  
+  $pplqstart = $activequarter;
+  $pplqend = $endquarter;
+  
+  if ($entryselected) {
+    $actiondesc = "viewing '" . $entryselected . "'";
+    $errorlist = "";
+    
+    if (time() < $endquarter) {
+      $errorlist .= "This quarter hasn't finished yet. Reporting will be incomplete.<br /><br />";
+      $endquarter = time();
+    } else if (time() < ($endquarter + (86400*2))) {
+      $errorlist .= "You must wait until two days after the end of the quarter in order to generate accurate reporting figures.<br /><br />";
+    }
+    
+    $replaycheck = db_query("SELECT schedule_start FROM {otc_schedule} WHERE schedule_show_type = '2' AND schedule_replay_orig_id = '0' AND `schedule_start` >= '" . date("Y-m-d H:i:s",$activequarter) . "' AND `schedule_start` < '" . date("Y-m-d H:i:s",$endquarter) . "' ORDER BY `schedule_start` ASC");
+    $replaylist = $replaycheck->fetchAll();
+    if (sizeof($replaylist) > 0) {
+      $errorlist .= "The following schedule entries are listed as replays, but are missing links to their original shows:<br />";
+      $errorlist .= "<ul>";
+    }
+    for ($i=0;$i<sizeof($replaylist);$i++) {
+      $errorlist .= "<li>" . date("d/m/Y H:i",strtotime($replaylist[$i]->schedule_start)) . "</li>";
+    }
+    if (sizeof($replaylist) > 0) {
+      $errorlist .= "</ul><br />";
+    }
+    
+    $playlistcheck = db_query("SELECT schedule_start FROM {otc_schedule} WHERE schedule_show_type != '2' AND schedule_playlisted = '0' AND `schedule_start` >= '" . date("Y-m-d H:i:s",$activequarter) . "' AND `schedule_start` < '" . date("Y-m-d H:i:s",$endquarter) . "' ORDER BY `schedule_start` ASC");
+    $playlistlist = $playlistcheck->fetchAll();
+    if (sizeof($playlistlist) > 0) {
+      $errorlist .= "The following schedule entries are missing playlists:<br />";
+      $errorlist .= "<ul>";
+    }
+    for ($i=0;$i<sizeof($playlistlist);$i++) {
+      $errorlist .= "<li>" . date("d/m/Y H:i",strtotime($playlistlist[$i]->schedule_start)) . "</li>";
+    }
+    if (sizeof($playlistlist) > 0) {
+      $errorlist .= "</ul><br />";
+    }
+    
+    $playlistcheck = db_query("SELECT schedule_start FROM {otc_schedule} WHERE schedule_show_type != '2' AND schedule_playlisted = '1' AND `schedule_start` >= '" . date("Y-m-d H:i:s",$activequarter) . "' AND `schedule_start` < '" . date("Y-m-d H:i:s",$endquarter) . "' ORDER BY `schedule_start` ASC");
+    $playlistlist = $playlistcheck->fetchAll();
+    if (sizeof($playlistlist) > 0) {
+      $errorlist .= "The following schedule entries have playlists in the old format and cannot be included in the report:<br />";
+      $errorlist .= "<ul>";
+    }
+    for ($i=0;$i<sizeof($playlistlist);$i++) {
+      $errorlist .= "<li>" . date("d/m/Y H:i",strtotime($playlistlist[$i]->schedule_start)) . "</li>";
+    }
+    if (sizeof($playlistlist) > 0) {
+      $errorlist .= "</ul><br />";
+    }
+    
+    $replaycheck = db_query("SELECT sched1.schedule_start AS replaystart, sched2.schedule_id AS idnum, sched2.schedule_start AS origstart, sched2.schedule_playlisted AS playlist FROM {otc_schedule} AS sched1 LEFT JOIN {otc_schedule} AS sched2 ON sched1.`schedule_replay_orig_id` = sched2.`schedule_id` WHERE sched1.`schedule_show_type` = 2 AND sched1.`schedule_replay_orig_id` != 0 AND sched2.`schedule_playlisted` <= '1' AND sched1.`schedule_start` >= '" . date("Y-m-d H:i:s",$activequarter) . "' AND sched1.`schedule_start` < '" . date("Y-m-d H:i:s",$endquarter) . "' ORDER BY sched1.`schedule_start` ASC");
+    $replaylist = $replaycheck->fetchAll();
+    if (sizeof($replaylist) > 0) {
+      $errorlist .= "The following schedule entries are listed as replays, but their original shows do not have playlists associated with them:<br />";
+      $errorlist .= "<ul>";
+    }
+    for ($i=0;$i<sizeof($replaylist);$i++) {
+      $errorlist .= "<li>" . date("d/m/Y H:i",strtotime($replaylist[$i]->replaystart));
+      if (isset($replaylist[$i]->idnum)) {
+        if ($replaylist[$i]->playlist == 1) {
+          $errorlist .= " (Original show: " . date("d/m/Y H:i",strtotime($replaylist[$i]->origstart)) . ". Playlist exists but is in the old format and cannot be included)";
+        } else {
+          $errorlist .= " (Original show: " . date("d/m/Y H:i",strtotime($replaylist[$i]->origstart)) . ")";
+        }
+      } else {
+        $errorlist .= " (Could not link to original show. Please re-link in the schedule editor)";
+      }
+      $errorlist .= "</li>";
+    }
+    if (sizeof($replaylist) > 0) {
+      $errorlist .= "</ul><br />";
+    }
+    
+    $onlytracknums = false;
+    if ($errorlist == "") {
+      $onlytracknums = true;
+    }
+    
+    // Check for number of tracks in playlist query
+    $playlistcheck = db_query("SELECT sched1.schedule_start AS showstart1, COUNT(pl1.playlist_unique_id) AS trackcount1 FROM {otc_schedule} AS sched1 LEFT JOIN {otc_playlist_tracks} AS pl1 ON sched1.schedule_playlisted = pl1.playlist_id WHERE sched1.`schedule_start` >= '" . date("Y-m-d H:i:s",$activequarter) . "' AND sched1.`schedule_start` < '" . date("Y-m-d H:i:s",$endquarter) . "' AND sched1.schedule_playlisted > 1 GROUP BY pl1.playlist_id ORDER BY sched1.`schedule_start` ASC");
+    $playlistlist = $playlistcheck->fetchAll();
+    $firstrun = true;
+    for ($i=0;$i<sizeof($playlistlist);$i++) {
+      if ($playlistlist[$i]->trackcount1 == 0) {
+        if ($firstrun) {
+          $errorlist .= "The following schedule entries have playlists containing no tracks (this is ok if the entire show was playlisted in its first hour):<br /><ul>";
+          $firstrun = false;
+        }
+        $errorlist .= "<li>" . date("d/m/Y H:i",strtotime($playlistlist[$i]->showstart1)) . "</li>";
+      }
+    }
+    if (!$firstrun) {
+      $errorlist .= "</ul><br />";
+    }
+    
+    // Check for number of tracks in playlist query
+    $playlistcheck = db_query("SELECT sched1.schedule_start AS showstart1, sched2.schedule_start AS showstart2, COUNT(pl2.playlist_unique_id) AS trackcount2 FROM {otc_schedule} AS sched1 LEFT JOIN {otc_schedule} AS sched2 ON sched1.`schedule_replay_orig_id` = sched2.`schedule_id` LEFT JOIN {otc_playlist_tracks} AS pl2 ON sched2.schedule_playlisted = pl2.playlist_id WHERE sched1.`schedule_start` >= '" . date("Y-m-d H:i:s",$activequarter) . "' AND sched1.`schedule_start` < '" . date("Y-m-d H:i:s",$endquarter) . "' AND sched1.schedule_show_type = 2 AND sched2.schedule_playlisted > 1 GROUP BY pl2.playlist_id ORDER BY sched1.`schedule_start` ASC");
+    $playlistlist = $playlistcheck->fetchAll();
+    $firstrun = true;
+    for ($i=0;$i<sizeof($playlistlist);$i++) {
+      if ($playlistlist[$i]->trackcount2 == 0) {
+        if ($firstrun) {
+          $errorlist .= "The following replay schedule entries have original show playlists containing no tracks (this is ok if the entire show was playlisted in its first hour):<br /><ul>";
+          $firstrun = false;
+        }
+        $errorlist .= "<li>" . date("d/m/Y H:i",strtotime($playlistlist[$i]->showstart2)) . " (Original show for " . date("d/m/Y H:i",strtotime($playlistlist[$i]->showstart1)) . ")</li>";
+      }
+    }
+    if (!$firstrun) {
+      $errorlist .= "</ul><br />";
+    }
+    
+    if ($errorlist == "") {
+      drupal_set_message(t("No issues detected. Please select 'Generate Reports' below to get the download links (this may take some time)."));
+    } else {
+      if ($onlytracknums) {
+        drupal_set_message(t("Issues were identified with this quarter's reporting data. As these issues relate only to numbers of tracks in playlists, this will be ok if multi-part shows were playlisted using their first hour only. Otherwise, an inaccurate report will be generated."),"warning");
+      } else {
+        drupal_set_message(t("Issues were identified with this quarter's reporting data. Please fix these in order to generate an accurate report."),"error");
+      }
+    }
+  }
+
+  $form['reporting'] = array(
+      '#title' => t("Currently " . $actiondesc),
+      '#prefix' => '<div id="data-div">',
+      '#suffix' => '</div>',
+      '#type' => 'fieldset',
+  );
+  
+  $form['reporting']['content'] = array(
+      '#type' => 'markup',
+      '#markup' => '<div>' . $errorlist . '</div>',
+  );
+  
+  $form['reporting']['pplqstart'] = array(
+      '#type' => 'value',
+      '#value' => $pplqstart,
+  );
+  
+  $form['reporting']['pplqend'] = array(
+      '#type' => 'value',
+      '#value' => $pplqend,
+  );
+  
+  if ($entryselected) {
+    $form['reporting']['generate'] = array(
+        '#type' => 'submit',
+        '#default_value' => t('Generate Reports'),
+    );
+  }
+
+  return $form;
+}
+
+function offthechart_reporting_admin_callback($form, &$form_state) {
+  return $form['reporting'];
+}
+
+function offthechart_reporting_admin_submit($form, &$form_state) {
+  // Reports to generate:
+  // - Full track listing ordered by time, associated with shows (skipping blank playlists where in a multi-part show)
+  // - Full PPL track listing. Same order, but no play times. Missing out unsigned artists (PPL)
+  // - Total listener hours broken down by country (just PPL countries) with percentages (PPL)
+  // - Number of 'streams' in quarter (number of tracks played in a day * average listeners for that day, summed) (PRS)
+  // - Then stick them all in a zip file
+  
+  $quarterstart = $form_state['values']['pplqstart'];
+  $quarterend = $form_state['values']['pplqend'];
+  $currentday = $quarterstart;
+  $tracksperday = array($currentday => 0);
+  $folderpath = "files/reporting/";
+  $qstartmonth = date("n",$form_state['values']['pplqstart']);
+  $qstartyear = date("Y",$form_state['values']['pplqstart']);
+  $quartername = "";
+  if ($qstartmonth == 1) {
+    $quartername = "Q1-" . $qstartyear;
+  } else if ($qstartmonth == 4) {
+    $quartername = "Q2-" . $qstartyear;
+  } else if ($qstartmonth == 7) {
+    $quartername = "Q3-" . $qstartyear;
+  } else if ($qstartmonth == 10) {
+    $quartername = "Q4-" . $qstartyear;
+  }
+  
+  $fulltrackquery = db_query("SELECT sched1.schedule_id AS schedule_id,sched1.schedule_start AS schedule_start,sched1.schedule_title AS schedule_title,sched1.schedule_show_type AS schedule_show_type,sched2.schedule_start AS schedule_start_orig,sched1.schedule_uid AS schedule_uid,sched1.schedule_show_id AS schedule_show_id,sched1.schedule_playlisted AS schedule_playlisted,sched2.schedule_playlisted AS schedule_playlisted_orig,name,show_title,artist_name,artist_unsigned,track_name,track_mix,track_duration,track_isrc,track_label,track_catno,playlist_track_timestamp FROM (SELECT * FROM {otc_schedule} WHERE {otc_schedule}.`schedule_start` >= '" . date("Y-m-d H:i:s",$quarterstart) . "' AND {otc_schedule}.`schedule_start` < '" . date("Y-m-d H:i:s",$quarterend) . "') AS sched1 LEFT JOIN {users} ON sched1.schedule_uid = {users}.uid LEFT JOIN {otc_shows} ON sched1.schedule_show_id = {otc_shows}.show_id LEFT JOIN {otc_schedule} AS sched2 ON sched1.schedule_replay_orig_id = sched2.schedule_id LEFT JOIN {otc_playlist_tracks} AS pl1 ON sched1.schedule_playlisted = pl1.playlist_id OR sched2.schedule_playlisted = pl1.playlist_id LEFT JOIN {otc_tracks} ON {otc_tracks}.track_id = pl1.playlist_track_id LEFT JOIN {otc_artists} ON {otc_artists}.artist_id = {otc_tracks}.artist_id ORDER BY sched1.`schedule_start` ASC,pl1.playlist_track_order ASC,pl1.playlist_track_timestamp ASC");
+  $fulltracklist = $fulltrackquery->fetchAll();
+  
+  $otcreport = array(array("Show Start","Show Title","Show Type","Replay Of","Artist","Unsigned?","Title","Mix / Version","Duration","ISRC","Label","Catalogue No.","Played At"));
+  $pplreport = array(array("Artist","Title","Mix / Version","Duration","ISRC","Label","Catalogue No."));
+  $ppltracksplayed = 0;
+  
+  $recordedplaylistid = 0;
+  $recordedshowid = 0;
+  
+  for ($i=0;$i<sizeof($fulltracklist);$i++) {
+    // Create the PPL and general track list reports here
+    // Record number of signed tracks for each day - shows overlapping days will mess this up slightly, but can't do much about that
+    if (strtotime($fulltracklist[$i]->schedule_start) >= ($currentday + 86400)) {
+      $currentday += 86400;
+      $tracksperday[$currentday] = 0;
+    }
+    
+    $currentshowname = $fulltracklist[$i]->schedule_title;
+    $currentshowstart = date("d/m/y H:i",strtotime($fulltracklist[$i]->schedule_start));
+    if (($currentshowname == "") AND ($fulltracklist[$i]->schedule_uid != 0)) {
+      $currentshowname = $fulltracklist[$i]->name;
+    } else if (($currentshowname == "") AND ($fulltracklist[$i]->schedule_show_id != 0)) {
+      $currentshowname = $fulltracklist[$i]->show_title;
+    }
+    
+    if ($fulltracklist[$i]->schedule_id != $recordedshowid) {
+      // Do a check to make sure a playlist ID doesn't repeat twice in a row
+      if ($fulltracklist[$i]->schedule_show_type == 2) {
+        if ($fulltracklist[$i]->schedule_playlisted_orig == $recordedplaylistid) {
+          continue;
+        } else {
+          $recordedplaylistid = $fulltracklist[$i]->schedule_playlisted_orig;
+        }
+      } else if ($fulltracklist[$i]->schedule_show_type == 3) {
+        if ($fulltracklist[$i]->schedule_playlisted == $recordedplaylistid) {
+          continue;
+        } else {
+          $recordedplaylistid = $fulltracklist[$i]->schedule_playlisted;
+        }
+      } else {
+        $recordedplaylistid = $fulltracklist[$i]->schedule_playlisted;
+      }
+      $recordedshowid = $fulltracklist[$i]->schedule_id;
+    }
+    
+    $replayof = "";
+    $showtype = "";
+    $unsigned = "Yes";
+    $playtime = "";
+    if ($fulltracklist[$i]->schedule_show_type == 2) {
+      $replayof = date("d/m/Y H:i",strtotime($fulltracklist[$i]->schedule_start_orig));
+      $showtype = "Replay";
+    } else if ($fulltracklist[$i]->schedule_show_type == 3) {
+      if ($fulltracklist[$i]->artist_name != "") {
+        $playtime = date("H:i",$fulltracklist[$i]->playlist_track_timestamp);
+      }
+      $showtype = "Automated";
+    } else if ($fulltracklist[$i]->schedule_show_type == 1) {
+      $showtype = "Pre-Record";
+      if ($fulltracklist[$i]->artist_name != "") {
+        if ($fulltracklist[$i]->playlist_track_timestamp != 0) {
+          $playtime = date("H:i",$fulltracklist[$i]->playlist_track_timestamp);
+        }
+      }
+    } else if ($fulltracklist[$i]->schedule_show_type == 0) {
+      $showtype = "Live";
+      if ($fulltracklist[$i]->artist_name != "") {
+        if ($fulltracklist[$i]->playlist_track_timestamp != 0) {
+          $playtime = date("H:i",$fulltracklist[$i]->playlist_track_timestamp);
+        }
+      }
+    }
+    
+    if ($fulltracklist[$i]->artist_name != "") {
+      // List of all tracks gets added to here
+      
+      if ($fulltracklist[$i]->artist_unsigned == 0) {
+        $tracksperday[$currentday] += 1;
+        $unsigned = "No";
+        $ppltracksplayed += 1;
+        // PPL tracks get added here
+        // Columns: Artist, Title, Mix, Duration, ISRC, Label, Cat No
+        $pplreport[] = array(utf8_decode($fulltracklist[$i]->artist_name),utf8_decode($fulltracklist[$i]->track_name),utf8_decode($fulltracklist[$i]->track_mix),$fulltracklist[$i]->track_duration,$fulltracklist[$i]->track_isrc,$fulltracklist[$i]->track_label,$fulltracklist[$i]->track_catno);
+      }
+      
+      // Columns: Show start, Show title, Show type, Replay Of, Artist, Unsigned, Title, Mix, Duration, ISRC, Label, Cat No, Play Time
+      $otcreport[] = array($currentshowstart,$currentshowname,$showtype,$replayof,utf8_decode($fulltracklist[$i]->artist_name),$unsigned,utf8_decode($fulltracklist[$i]->track_name),utf8_decode($fulltracklist[$i]->track_mix),$fulltracklist[$i]->track_duration,$fulltracklist[$i]->track_isrc,$fulltracklist[$i]->track_label,$fulltracklist[$i]->track_catno,$playtime);
+    } else {
+      $otcreport[] = array($currentshowstart,$currentshowname,$showtype,$replayof,"","","","","","","","","");
+    }
+  }
+  
+  $pplreport[] = array("","","","","","","");
+  $tracksperhour = ($ppltracksplayed / (($quarterend - $quarterstart) / 60 / 60));
+  $pplreport[] = array("Total Tracks In Quarter: " . $ppltracksplayed,"Average Tracks Per Hour: " . round($tracksperhour,2),"","","","","");
+  
+  $filelocation = $folderpath . $quartername . '-PPL-Tracks-Report.csv';
+  if (file_exists($filelocation)) {
+    unlink($filelocation);
+  }
+  $fp = fopen($filelocation, 'w');
+  if ($fp) {
+    foreach ($pplreport as $fields) {
+      fputcsv($fp, $fields);
+    }
+    fclose($fp);
+    $valid_files[] = $filelocation;
+  }
+  $filelocation = $folderpath . $quartername . '-Internal-OTC-Tracks-Report.csv';
+  if (file_exists($filelocation)) {
+    unlink($filelocation);
+  }
+  $fp = fopen($filelocation, 'w');
+  if ($fp) {
+    foreach ($otcreport as $fields) {
+      fputcsv($fp, $fields);
+    }
+    fclose($fp);
+    $valid_files[] = $filelocation;
+  }
+  
+  $pplquery = db_query("SELECT geo_code FROM {otc_ppl_countries}");
+  $pplresults = $pplquery->fetchAll();
+  $pplcountries = array();
+  
+  $ppltotalsecs = 0;
+  $pplreporting = array();
+  $pplreport = array(array("Country Name","Total Listener Hours","Percentage"));
+
+  for ($i=0;$i<sizeof($pplresults);$i++) {
+    $pplcountries[] = $pplresults[$i]->geo_code;
+  }
+  
+  $tlhquery = db_query("SELECT SUM(listen_seconds) AS seconds, geo_code, geo_name FROM {otc_icecast_geo} WHERE log_timestamp >= '$quarterstart' AND log_timestamp < '$quarterend' GROUP BY geo_code ORDER BY seconds DESC");
+  $tlhresult = $tlhquery->fetchAll();
+
+  for ($i=0;$i<sizeof($tlhresult);$i++) {
+    $secs = $tlhresult[$i]->seconds;
+    $geocode = $tlhresult[$i]->geo_code;
+    $geoname = $tlhresult[$i]->geo_name;
+    if (in_array($geocode,$pplcountries)) {
+      $pplreporting[] = array($geoname,$geocode,$secs,0);
+      $ppltotalsecs += $secs;
+    }
+  }
+    
+  for ($i=0;$i<sizeof($pplreporting);$i++) {
+    $percentage = round((($pplreporting[$i][2] / $ppltotalsecs) * 100),2);
+    $pplreporting[$i][3] = $percentage;
+    
+    // Create the CSV here too
+    $pplreport[] = array($pplreporting[$i][0],round(($pplreporting[$i][2]/60/60),2),$pplreporting[$i][3]);
+  }
+  $pplreport[] = array("","","");
+  $pplreport[] = array("Total",round(($ppltotalsecs/60/60),2),"100%");
+  
+  $filelocation = $folderpath . $quartername . '-PPL-TLH-Report.csv';
+  if (file_exists($filelocation)) {
+    unlink($filelocation);
+  }
+  $fp = fopen($filelocation, 'w');
+  if ($fp) {
+    foreach ($pplreport as $fields) {
+      fputcsv($fp, $fields);
+    }
+    fclose($fp);
+    $valid_files[] = $filelocation;
+  }
+  
+  $prsreport[] = array("Period","Total Number of UK Streams");
+  // One more query for the listener seconds (for UK, PPL countries, or all?) each day, added to an array. This allows an average day listener figure
+  // Tracks for each day should already have been found and can be multiplied together.
+  $tlhquery = db_query("SELECT listen_seconds AS seconds, log_timestamp FROM {otc_icecast_geo} WHERE geo_code = 'GB' AND log_timestamp >= '$quarterstart' AND log_timestamp < '$quarterend' ORDER BY log_timestamp ASC");
+  $tlhresult = $tlhquery->fetchAll();
+
+  $streams = 0;
+  for ($i=0;$i<sizeof($tlhresult);$i++) {
+    $secs = $tlhresult[$i]->seconds;
+    $tracks = $tracksperday[$tlhresult[$i]->log_timestamp];
+    $listeners = ($secs / 60 / 60 / 24);
+    $streams += $listeners * $tracks;
+  }
+  
+  $prsreport[] = array($quartername,round($streams,0));
+  
+  $filelocation = $folderpath . $quartername . '-PRS-Streams-Report.csv';
+  if (file_exists($filelocation)) {
+    unlink($filelocation);
+  }
+  $fp = fopen($filelocation, 'w');
+  if ($fp) {
+    foreach ($prsreport as $fields) {
+      fputcsv($fp, $fields);
+    }
+    fclose($fp);
+    $valid_files[] = $filelocation;
+  }
+  
+  // Add the files to a zip and provide a download link
+  if (file_exists($folderpath . $quartername . '-Reporting.zip')) {
+    unlink($folderpath . $quartername . '-Reporting.zip');
+  }
+  $zip = new ZipArchive();
+  $zipdest = $folderpath . $quartername . '-Reporting.zip';
+  if($zip->open($zipdest,$overwrite ? ZIPARCHIVE::OVERWRITE : ZIPARCHIVE::CREATE) !== true) {
+    drupal_set_message("Unable to create ZIP file","error");
+  } else {
+    foreach($valid_files as $file) {
+      $zip->addFile($file,str_replace("files/reporting/","",$file));
+      //unlink($file);
+    }
+    $zip->close();
+    drupal_set_message(t("Reports are now available to download from <a href=\"http://www.offthechartradio.co.uk/" . $zipdest . "\">http://www.offthechartradio.co.uk/" . $zipdest . "</a>"));
+  }
+}
+
+
+function offthechart_database_admin() {
+  
+  $errors = false;
+  $output = "";
+  
+  // Check artists for duplicate mbids
+  $artistquery = db_query("SELECT * FROM (SELECT artist_mbid,COUNT(artist_mbid) AS cnt FROM {otc_artists} WHERE {otc_artists}.artist_mbid != '' GROUP BY {otc_artists}.artist_mbid ORDER BY cnt DESC) AS {otc_artist_mbids} LEFT JOIN {otc_artists} ON {otc_artist_mbids}.artist_mbid = {otc_artists}.artist_mbid WHERE {otc_artist_mbids}.cnt > 1");
+  $artistlist = $artistquery->fetchAll();
+  if (sizeof($artistlist) > 0) {
+    $errors = true;
+    $output .= "The following artists have duplicate MusicBrainz IDs:<br /><ul>";
+  }
+  $lastmbid = "";
+  $firstrun = true;
+  for ($i=0;$i<sizeof($artistlist);$i++) {
+    if ($artistlist[$i]->artist_mbid != $lastmbid) {
+      if (!$firstrun) {
+        $output .= "</li>";
+      }
+      $output .= "<li><a href=\"http://www.musicbrainz.org/artist/" . $artistlist[$i]->artist_mbid . "\" target=\"_blank\">" . $artistlist[$i]->artist_mbid . "</a>: ";
+    } else {
+      $output .= ", ";
+    }
+    $firstrun = false;
+    $output .= $artistlist[$i]->artist_name;
+    $lastmbid = $artistlist[$i]->artist_mbid;
+  }
+  if (sizeof($artistlist) > 0) {
+    $output .= "</li></ul><br />";
+  }
+  
+  // Check the playlists table for playlists that aren't referenced in the schedule
+  $playlistquery = db_query("SELECT playlist_id FROM {otc_playlists} LEFT JOIN {otc_schedule} AS sched1 ON {otc_playlists}.playlist_id = sched1.schedule_playlisted LEFT JOIN {otc_schedule} AS sched2 ON {otc_playlists}.playlist_id = sched2.schedule_playlist_draft WHERE sched1.schedule_playlisted IS NULL AND sched2.schedule_playlist_draft IS NULL ORDER BY playlist_id ASC");
+  $playlistlist = $playlistquery->fetchAll();
+  if (sizeof($playlistlist) > 0) {
+    $errors = true;
+    $output .= "The following playlists are not referenced in the schedule (remember to remove their tracks too!):<br /><ul>";
+  }
+  for ($i=0;$i<sizeof($playlistlist);$i++) {
+    $output .= "<li>" . $playlistlist[$i]->playlist_id . "</li>";
+  }
+  if (sizeof($playlistlist) > 0) {
+    $output .= "</ul><br />";
+  }
+  
+  // Check the tracks table for tracks with zero duration
+  $trackquery = db_query("SELECT artist_name,track_name,track_mix FROM {otc_tracks} LEFT JOIN {otc_artists} ON {otc_tracks}.artist_id = {otc_artists}.artist_id WHERE track_duration = '0' ORDER BY artist_name ASC, track_name ASC, track_mix ASC");
+  $tracklist = $trackquery->fetchAll();
+  if (sizeof($tracklist) > 0) {
+    $errors = true;
+    $output .= "The following tracks have zero duration:<br /><ul>";
+  }
+  for ($i=0;$i<sizeof($tracklist);$i++) {
+    if ($tracklist[$i]->track_mix != "") {
+      $tracklist[$i]->track_mix = " (" . $tracklist[$i]->track_mix . ")";
+    }
+    $output .= "<li>" . $tracklist[$i]->track_name . $tracklist[$i]->track_mix . " by " . $tracklist[$i]->artist_name . "</li>";
+  }
+  if (sizeof($tracklist) > 0) {
+    $output .= "</ul><br />";
+  }
+  
+  // Check the tracks table for artists that don't link to an artist
+  $trackquery = db_query("SELECT track_id FROM {otc_tracks} LEFT JOIN {otc_artists} ON {otc_tracks}.artist_id = {otc_artists}.artist_id WHERE artist_name IS NULL ORDER BY track_id ASC");
+  $tracklist = $trackquery->fetchAll();
+  if (sizeof($tracklist) > 0) {
+    $errors = true;
+    $output .= "The following tracks have no artist:<br /><ul>";
+  }
+  for ($i=0;$i<sizeof($tracklist);$i++) {
+    $output .= "<li>" . $tracklist[$i]->track_id . "</li>";
+  }
+  if (sizeof($tracklist) > 0) {
+    $output .= "</ul><br />";
+  }
+  
+  // Check the playlist tracks table for tracks that don't exist
+  $trackquery = db_query("SELECT playlist_unique_id FROM {otc_playlist_tracks} LEFT JOIN {otc_tracks} ON {otc_tracks}.track_id = {otc_playlist_tracks}.playlist_track_id WHERE track_name IS NULL ORDER BY playlist_unique_id ASC");
+  $tracklist = $trackquery->fetchAll();
+  if (sizeof($tracklist) > 0) {
+    $errors = true;
+    $output .= "The following playlist entries reference tracks that don't exist:<br /><ul>";
+  }
+  for ($i=0;$i<sizeof($tracklist);$i++) {
+    $output .= "<li>" . $tracklist[$i]->playlist_unique_id . "</li>";
+  }
+  if (sizeof($tracklist) > 0) {
+    $output .= "</ul><br />";
+  }
+  
+  // Check for stray playlist tracks
+  $trackquery = db_query("SELECT playlist_unique_id FROM {otc_playlist_tracks} LEFT JOIN {otc_playlists} ON {otc_playlists}.playlist_id = {otc_playlist_tracks}.playlist_id WHERE playlist_uploaded_timestamp IS NULL ORDER BY playlist_unique_id ASC");
+  $tracklist = $trackquery->fetchAll();
+  if (sizeof($tracklist) > 0) {
+    $errors = true;
+    $output .= "The following playlist entries reference playlists that don't exist:<br /><ul>";
+  }
+  for ($i=0;$i<sizeof($tracklist);$i++) {
+    $output .= "<li>" . $tracklist[$i]->playlist_unique_id . "</li>";
+  }
+  if (sizeof($tracklist) > 0) {
+    $output .= "</ul><br />";
+  }
+  
+  // Check the sam tracks table for tracks that don't exist
+  $trackquery = db_query("SELECT {otc_sam_tracks}.track_id AS track_id FROM {otc_sam_tracks} LEFT JOIN {otc_tracks} ON {otc_tracks}.track_id = {otc_sam_tracks}.track_id WHERE track_name IS NULL ORDER BY {otc_sam_tracks}.track_id ASC");
+  $tracklist = $trackquery->fetchAll();
+  if (sizeof($tracklist) > 0) {
+    $errors = true;
+    $output .= "The following SAM table entries reference tracks that don't exist:<br /><ul>";
+  }
+  for ($i=0;$i<sizeof($tracklist);$i++) {
+    $output .= "<li>" . $tracklist[$i]->track_id . "</li>";
+  }
+  if (sizeof($tracklist) > 0) {
+    $output .= "</ul><br />";
+  }
+  
+  if (!$errors) {
+    drupal_set_message(t("No database errors found"));
+  } else {
+    drupal_set_message(t("Issues have been found as listed below"),"error");
+  }
+
+  return t($output);
+}

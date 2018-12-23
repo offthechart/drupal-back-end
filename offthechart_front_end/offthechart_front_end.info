@@ -1,0 +1,11 @@
+; $Id$
+name = OTC front end pages
+description = Provides front end access to schedule, music info etc
+package = Off The Chart Radio
+core = 7.x
+files[] = offthechart_front_end.module
+files[] = content.php
+dependencies[] = offthechart
+dependencies[] = twitter_pull
+;configure = admin/config/offthechart
+version = 7.x-1.x-dev

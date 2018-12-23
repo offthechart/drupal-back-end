@@ -1,0 +1,366 @@
+<?php
+function offthechart_schema() {
+  $schema['otc_shows'] = array(
+     // specification for OTC shows table
+     'description' => t('List of OTC shows and their properties.'),
+     'fields' => array(
+        'show_id' => array(
+          'description' => 'Unique identifier for OTC shows.',
+          'type' => 'serial',
+          'not null' => TRUE),
+        'show_title' => array(
+          'description' => 'Show title.',
+          'type' => 'varchar',
+          'length' => 100,
+          'not null' => TRUE,
+          'default' => ''),
+        'show_image' => array(
+          'description' => 'Show image.',
+          'type' => 'varchar',
+          'length' => 20,
+          'not null' => TRUE,
+          'default' => ''),
+        'show_minisite' => array(
+          'description' => 'Show minisite.',
+          'type' => 'varchar',
+          'length' => 20,
+          'not null' => TRUE,
+          'default' => ''),
+        'show_email' => array(
+          'description' => 'Show e-mail.',
+          'type' => 'varchar',
+          'length' => 20,
+          'not null' => TRUE,
+          'default' => ''),
+        'show_forum' => array(
+          'description' => 'Show forum.',
+          'type' => 'varchar',
+          'length' => 20,
+          'not null' => TRUE,
+          'default' => ''),
+        'show_master_uid' => array(
+          'description' => 'Master DJ associated with show.',
+          'type' => 'int',
+          'not null' => TRUE),
+        ),
+     'primary key' => array('show_id'),
+  );
+  $schema['otc_shows_users'] = array(
+     // specification for OTC DJ to show links table
+     'description' => t('Show IDs matched to user IDs in the Drupal users table.'),
+     'fields' => array(
+        'show_id' => array(
+          'description' => 'Unique identifier for OTC shows.',
+          'type' => 'int',
+          'not null' => TRUE),
+        'uid' => array(
+          'description' => 'Unique identifier for users (DJs).',
+          'type' => 'int',
+          'not null' => TRUE),
+        ),
+     'unique keys' => array(
+        'show_user' => array('show_id', 'uid'),
+        ),
+  );
+  $schema['otc_servers'] = array(
+     // specification for OTC servers table
+     'description' => t('List of OTC broadcast servers and their MySQL login details.'),
+     'fields' => array(
+        'server_id' => array(
+          'description' => 'Unique identifier for OTC servers.',
+          'type' => 'serial',
+          'not null' => TRUE),
+        'server_name' => array(
+          'description' => 'Server name.',
+          'type' => 'varchar',
+          'length' => 30,
+          'not null' => TRUE,
+          'default' => ''),
+        'server_ip' => array(
+          'description' => 'Server IP.',
+          'type' => 'varchar',
+          'length' => 15,
+          'not null' => TRUE,
+          'default' => ''),
+        'server_port' => array(
+          'description' => 'Server port.',
+          'type' => 'int',
+          'size' => 'small',
+          'not null' => TRUE,
+          'default' => '80'),
+        'server_username' => array(
+          'description' => 'Server username.',
+          'type' => 'varchar',
+          'length' => 20,
+          'not null' => TRUE,
+          'default' => 'username'),
+        'server_password' => array(
+          'description' => 'Server password.',
+          'type' => 'varchar',
+          'length' => 20,
+          'not null' => TRUE,
+          'default' => 'password'),
+        'server_db_name' => array(
+          'description' => 'Server SAM DB name.',
+          'type' => 'varchar',
+          'length' => 20,
+          'not null' => TRUE,
+          'default' => 'SAMDB'),
+        'server_daily_sync' => array(
+          'description' => 'Sync to this SAM server daily.',
+          'type' => 'int',
+          'size' => 'small',
+          'not null' => TRUE,
+          'default' => '0'),
+	'server_active' => array(
+	  'description' => 'Active server? Only one can be active at any one time.',
+	  'type' => 'int',
+	  'size' => 'small',
+	  'not null' => TRUE,
+	  'default' => '0'),
+        ),
+     'primary key' => array('server_id'),
+  );
+  $schema['otc_sam_config'] = array(
+     // specification for OTC sam server sync table
+     'description' => t('Current data copied nightly to the broadcast servers to provide playout instructions.'),
+     'fields' => array(
+        'config_id' => array(
+          'description' => 'Unique identifier for OTC config lines.',
+          'type' => 'serial',
+          'not null' => TRUE),
+        'config_date_time' => array(
+          'description' => 'Date and time for config execution.',
+          'type' => 'varchar',
+          'length' => 19,
+          'not null' => TRUE,
+          'default' => ''),
+        'config_event_type' => array(
+          'description' => 'Type of event to be executed.',
+          'type' => 'varchar',
+          'length' => 20,
+          'not null' => TRUE,
+          'default' => ''),
+        'config_arg1' => array(
+          'description' => 'First argument.',
+          'type' => 'varchar',
+          'length' => 100,
+          'not null' => TRUE,
+          'default' => ''),
+        'config_arg2' => array(
+          'description' => 'Second argument.',
+          'type' => 'varchar',
+          'length' => 100,
+          'not null' => TRUE,
+          'default' => ''),
+        ),
+     'primary key' => array('config_id'),
+  );
+  $schema['otc_schedule'] = array(
+     // specification for OTC schedule table
+     'description' => t('Current and past schedule data used on the site and to produce playout data.'),
+     'fields' => array(
+       'schedule_id' => array(
+          'description' => 'Unique identifier',
+          'type' => 'serial',
+          'not null' => TRUE),
+        'schedule_start' => array(
+          'description' => 'Start time for shows.',
+          'type' => 'varchar',
+          'length' => 19,
+          'not null' => TRUE,
+          'default' => ''),
+        'schedule_title' => array(
+          'description' => 'Scheduled show name.',
+          'type' => 'varchar',
+          'length' => 100,
+          'not null' => TRUE,
+          'default' => ''),
+        'schedule_image' => array(
+          'description' => 'Show image.',
+          'type' => 'varchar',
+          'length' => 20,
+          'not null' => TRUE,
+          'default' => ''),
+        'schedule_minisite' => array(
+          'description' => 'Show minisite.',
+          'type' => 'varchar',
+          'length' => 20,
+          'not null' => TRUE,
+          'default' => ''),
+        'schedule_email' => array(
+          'description' => 'Show e-mail.',
+          'type' => 'varchar',
+          'length' => 20,
+          'not null' => TRUE,
+          'default' => ''),
+        'schedule_forum' => array(
+          'description' => 'Show forum.',
+          'type' => 'varchar',
+          'length' => 20,
+          'not null' => TRUE,
+          'default' => ''),
+        'schedule_description' => array(
+          'description' => 'Show description.',
+          'type' => 'varchar',
+          'length' => 500,
+          'not null' => TRUE,
+          'default' => ''),
+        'schedule_uid' => array(
+          'description' => 'Show DJ ID.',
+          'type' => 'int',
+          'not null' => TRUE),
+        'schedule_show_id' => array(
+          'description' => 'Scheduled show ID.',
+          'type' => 'int',
+          'not null' => TRUE),
+        'schedule_show_type' => array(
+          'description' => 'Show type.',
+          'type' => 'varchar',
+          'length' => 4,
+          'not null' => TRUE,
+          'default' => ''),
+        'schedule_filename' => array(
+          'description' => 'Show filename.',
+          'type' => 'varchar',
+          'length' => 100,
+          'not null' => TRUE,
+          'default' => ''),
+        'schedule_theme' => array(
+          'description' => 'Show theme.',
+          'type' => 'varchar',
+          'length' => 100,
+          'not null' => TRUE,
+          'default' => ''),
+        'schedule_playlisted' => array(
+          'description' => 'Has the show been playlisted?',
+          'type' => 'int',
+          'size' => 'small',
+          'not null' => TRUE,
+          'default' => '0'),
+        ),
+     'primary key' => array('schedule_id'),
+  );
+  $schema['otc_artists'] = array(
+     // specification for OTC artists table
+     'description' => t('List of artists retrieved from playlists and matched where possible to data sources.'),
+     'fields' => array(
+        'artist_id' => array(
+          'description' => 'Unique identifier for artists.',
+          'type' => 'serial',
+          'not null' => TRUE),
+        'artist_name' => array(
+          'description' => 'Artist name.',
+          'type' => 'varchar',
+          'length' => 200,
+          'not null' => TRUE,
+          'default' => ''),
+        'artist_mbid' => array(
+          'description' => 'Artist MusicBrainz ID.',
+          'type' => 'varchar',
+          'length' => 50,
+          'not null' => TRUE,
+          'default' => ''),
+        ),
+     'primary key' => array('artist_id'),
+  );
+  $schema['otc_tracks'] = array(
+     // specification for OTC tracks table
+     'description' => t('List of tracks retrieved from playlists and matched where possible to data sources.'),
+     'fields' => array(
+        'track_id' => array(
+          'description' => 'Unique identifier for tracks.',
+          'type' => 'serial',
+          'not null' => TRUE),
+        'artist_id' => array(
+          'description' => 'Track link to artist.',
+          'type' => 'int',
+          'not null' => TRUE),
+        'track_name' => array(
+          'description' => 'Track name.',
+          'type' => 'varchar',
+          'length' => 200,
+          'not null' => TRUE,
+          'default' => ''),
+        'track_mbid' => array(
+          'description' => 'Track MusicBrainz ID.',
+          'type' => 'varchar',
+          'length' => 50,
+          'not null' => TRUE,
+          'default' => ''),
+        ),
+     'primary key' => array('track_id'),
+  );
+  /*
+  $schema['otc_playlists_processed'] = array(
+     // specification for OTC processed playlists table
+     'description' => t('Tracks played by DJs and processed to match them with the show or DJ ID.'),
+  );
+  $schema['otc_playlists_unprocessed'] = array(
+     // specification for OTC unprocessed playlists table - data processed when cron runs
+     'description' => t('DJ tracks yet to be passed through to the processed table.'),
+  );
+  $schema['otc_sam_processed'] = array(
+     // specification for OTC sam server processed playlists table
+     'description' => t('Tracks played by SAM servers and processed to match them with the show or DJ ID.'),
+  );
+  $schema['otc_sam_unprocessed'] = array(
+     // specification for OTC sam server unprocessed playlists table - data processed when cron runs
+     'description' => t('SAM tracks yet to be passed through to the processed table.'),
+  );
+  */
+  return $schema;
+}
+
+function offthechart_install() {
+  // Add custom profile fields if they don't exist
+  $profilequery = db_query("SELECT fid,name FROM {profile_field} WHERE `name` = 'profile_otc_webcam' OR `name` = 'profile_otc_customurl' OR `name` = 'profile_otc_minisite' OR `name` = 'profile_otc_imgonair' OR `name` = 'profile_otc_forum'");
+  $profilelist = $profilequery->fetchAll();
+  if (sizeof($profilelist) == 0) {
+    $webcam = array('title' => "Webcam", 'name' => "profile_otc_webcam", 'category' => "Private OTC DJ Data", 'page' => "People who use webcams", 'type' => "checkbox", 'visibility' => 4, 'weight' => 9);
+    $customurl = array('title' => "Custom Server URL", 'name' => "profile_otc_customurl", 'category' => "Private OTC DJ Data", 'type' => "url", 'visibility' => 4, 'weight' => 10);
+    $minisite = array('title' => "Minisite", 'name' => "profile_otc_minisite", 'explanation' => "offthechartradio.co.uk/XXXXXX", 'category' => "Private OTC DJ Data", 'type' => "textfield", 'visibility' => 4, 'weight' => 7);
+    $onairimg = array('title' => "On Air Image", 'name' => "profile_otc_imgonair", 'explanation' => "/djdata/images/onair/XXXXXX.png", 'category' => "Private OTC DJ Data", 'type' => "textfield", 'visibility' => 4, 'weight' => 6);
+    $forum = array('title' => "Forum", 'name' => "profile_otc_forum", 'explanation' => "/forums/viewforum.php?f=XXXXXX", 'category' => "Private OTC DJ Data", 'type' => "textfield", 'visibility' => 4, 'weight' => 8);
+    $nowplaying = array('title' => "Now Playing", 'name' => "profile_otc_nowplaying", 'explanation' => "", 'category' => "Private OTC DJ Data", 'type' => "textfield", 'visibility' => 4, 'weight' => 11);
+    $nowplayingtime = array('title' => "Now Playing Time", 'name' => "profile_otc_nowplayingtime", 'explanation' => "", 'category' => "Private OTC DJ Data", 'type' => "textfield", 'visibility' => 4, 'weight' => 12);
+    $alert = array('title' => "Alert", 'name' => "profile_otc_alert", 'explanation' => "", 'category' => "Private OTC DJ Data", 'type' => "textfield", 'visibility' => 4, 'weight' => 13);
+    $alerttime = array('title' => "Alert Time", 'name' => "profile_otc_alerttime", 'explanation' => "", 'category' => "Private OTC DJ Data", 'type' => "textfield", 'visibility' => 4, 'weight' => 14);
+    db_insert('profile_field')->fields($webcam)->execute();
+    db_insert('profile_field')->fields($customurl)->execute();
+    db_insert('profile_field')->fields($minisite)->execute();
+    db_insert('profile_field')->fields($onairimg)->execute();
+    db_insert('profile_field')->fields($forum)->execute();
+    db_insert('profile_field')->fields($nowplaying)->execute();
+    db_insert('profile_field')->fields($nowplayingtime)->execute();
+    db_insert('profile_field')->fields($alert)->execute();
+    db_insert('profile_field')->fields($alerttime)->execute();
+  } else {
+    drupal_set_message(t("Custom profile fields needed appear to exist already. No further fields were added."), "warning");
+  }
+  // Add custom role if doesn't exist
+  $rolequery = db_query("SELECT rid,name FROM {role} WHERE `name` = 'DJs'");
+  $rolelist = $rolequery->fetchAll();
+  if (sizeof($rolelist) == 0) {
+    $djrole = array('name' => "DJs", 'weight' => 3);
+    db_insert('role')->fields($djrole)->execute();
+  } else {
+    drupal_set_message(t("Custom DJs role appears to exist already. No further roles were added."), "warning");
+  }
+}
+
+function offthechart_uninstall() {
+  /* // Stopped doing this as the data can be useful later anyway
+  // Remove custom profile fields and any contents they had
+  $profilequery = db_query("SELECT fid,name FROM {profile_field} WHERE `name` = 'profile_otc_webcam' OR `name` = 'profile_otc_customurl' OR `name` = 'profile_otc_minisite' OR `name` = 'profile_otc_imgonair' OR `name` = 'profile_otc_forum'");
+  $dbfieldlist = $profilequery->fetchAll();
+  for ($i=0;$i<sizeof($dbfieldlist);$i++) {
+    $fid = $dbfieldlist[$i]->fid;
+    db_delete('profile_value')->condition('fid', $fid)->execute();
+    db_delete('profile_field')->condition('fid', $fid)->execute();
+  }
+  */
+  // Drop my tables.
+  drupal_uninstall_schema('offthechart');
+}
+?>
