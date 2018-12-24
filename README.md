@@ -19,6 +19,9 @@ The two modules in this repository were used to manage numerous aspects of the r
 * Provides hooks into the station's playout system to manage encoders, reconnection of live DJs etc.
 * Provides access to listening figures across various periods for music rights reporting
 
+### Screenshots
+<img src="images/otc-frontend-1.png" width="15%"></img> <img src="images/otc-frontend-2.png" width="15%"></img> <img src="images/otc-frontend-3.png" width="15%"></img> <img src="images/otc-backend-1.png" width="15%"></img> <img src="images/otc-backend-2.png" width="15%"></img> <img src="images/otc-backend-3.png" width="15%"></img>
+
 ## Questions?
 Feel free to create an issue. It's an awfully long time since I maintained this code however, so I can't guarantee I can remember how it works!
 
